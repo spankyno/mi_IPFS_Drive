@@ -52,7 +52,7 @@ pnpm install   # o npm install / yarn
 1. Crea un proyecto gratis en [supabase.com](https://supabase.com) (free tier: 500 MB DB, 50k usuarios activos/mes, Realtime incluido).
 2. En el SQL Editor del dashboard, ejecuta `supabase/migrations/0001_init.sql`.
 3. En **Authentication → Providers**, activa "Email" y asegúrate de que "Confirm email" y "Magic Link" estén habilitados.
-4. En **Authentication → URL Configuration**, añade `http://localhost:3000/auth/callback` (y tu dominio de producción) como Redirect URL.
+4. En **Authentication → URL Configuration**, añade `http://localhost:3000/auth/callback` (y tu dominio de producción) como Redirect URL. Esta misma URL de callback maneja magic links, confirmación de email **y** reset de contraseña.
 5. Copia `Project URL` y `anon public key` a tu `.env.local`.
 
 ### 3. Elegir un servicio de pinning IPFS
@@ -109,6 +109,22 @@ Para mostrar imágenes/PDFs/video directamente en el navegador usamos `https://<
 
 ---
 
+## 🔑 Sistema de autenticación (Paso 2)
+
+Implementado con `@supabase/ssr` (cliente browser + server + middleware), Server Actions de React 19 (`useActionState`) y validación con Zod.
+
+**Rutas:**
+- `/login` — tabs de **email+password** y **magic link**.
+- `/register` — alta con confirmación por email (configurable en Supabase).
+- `/forgot-password` → `/update-password` — flujo completo de reset de contraseña.
+- `/auth/callback` — Route Handler que canjea el `code` (PKCE) por una sesión, tanto para magic links como para confirmaciones de email y reset de contraseña.
+- `/dashboard/*` — protegidas por `middleware.ts` (redirige a `/login?redirectTo=...` si no hay sesión) y de forma redundante en el `layout.tsx` del dashboard (defensa en profundidad).
+
+**Notas de seguridad:**
+- El middleware usa `supabase.auth.getUser()` (valida el JWT contra el servidor), nunca `getSession()` a secas, para evitar confiar en una cookie sin verificar.
+- Los mensajes de error de login/reset son deliberadamente genéricos ("email o contraseña incorrectos", "si existe una cuenta...") para no filtrar qué emails están registrados.
+- `SUPABASE_SERVICE_ROLE_KEY` solo se usa en `createServiceRoleClient()` (server-only), nunca llega al bundle de cliente.
+
 ## 🔒 Seguridad y privacidad
 
 - **Row Level Security** en todas las tablas de Supabase: cada usuario solo puede leer/escribir sus propios registros; los archivos `public`/`unlisted` son legibles por cualquiera (necesario para los enlaces de compartición).
@@ -130,8 +146,8 @@ Para mostrar imágenes/PDFs/video directamente en el navegador usamos `https://<
 
 ## 🗺️ Roadmap de implementación (este build es iterativo)
 
-- [x] 1. Estructura base + configuración + README (**este paso**)
-- [ ] 2. Auth: registro, login, magic links, middleware de rutas protegidas
+- [x] 1. Estructura base + configuración + README
+- [x] 2. Auth: registro, login, magic links, reset de contraseña, middleware de rutas protegidas (**este paso**)
 - [ ] 3. Dashboard: stats, storage bar, activity feed
 - [ ] 4. Upload flow: drag & drop, carpetas, progreso
 - [ ] 5. Previews, búsqueda avanzada, tags
