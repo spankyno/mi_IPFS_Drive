@@ -85,11 +85,13 @@ create table public.files (
   updated_at timestamptz not null default now()
 );
 
+-- pg_trgm habilita búsqueda difusa/parcial por nombre (ILIKE '%texto%' con índice)
+create extension if not exists pg_trgm;
+
 create index files_owner_idx on public.files(owner_id);
 create index files_folder_idx on public.files(folder_id);
 create index files_tags_idx on public.files using gin(tags);
 create index files_name_trgm_idx on public.files using gin(name gin_trgm_ops);
-create extension if not exists pg_trgm;
 
 alter table public.files enable row level security;
 
