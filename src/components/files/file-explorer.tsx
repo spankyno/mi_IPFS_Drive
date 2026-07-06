@@ -9,6 +9,7 @@ import { UploadProgressPanel } from "@/components/files/upload-progress-panel";
 import { CreateFolderDialog } from "@/components/files/create-folder-dialog";
 import { FileBreadcrumb } from "@/components/files/file-breadcrumb";
 import { FileActionsMenu } from "@/components/files/file-actions-menu";
+import { FolderActionsMenu } from "@/components/files/folder-actions-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatBytes, formatRelativeTime } from "@/lib/utils/format";
@@ -142,14 +143,18 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
       ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {filteredFolders.map((folder) => (
-            <button
+            <div
               key={folder.id}
-              onClick={() => goToFolder(folder.id)}
-              className="group flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors hover:border-primary/40 hover:bg-accent"
+              className="group relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors hover:border-primary/40 hover:bg-accent"
             >
-              <Folder className="size-9 fill-amber-400/20 text-amber-500" />
-              <p className="w-full truncate text-sm font-medium">{folder.name}</p>
-            </button>
+              <div className="absolute right-1.5 top-1.5">
+                <FolderActionsMenu folder={folder} onChanged={() => invalidate(folderId)} />
+              </div>
+              <button onClick={() => goToFolder(folder.id)} className="flex flex-col items-center gap-2">
+                <Folder className="size-9 fill-amber-400/20 text-amber-500" />
+                <p className="w-full max-w-32 truncate text-sm font-medium">{folder.name}</p>
+              </button>
+            </div>
           ))}
           {filteredFiles.map((file) => {
             const Icon = iconForMime(file.mimeType);
@@ -192,15 +197,28 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
             </thead>
             <tbody className="divide-y">
               {filteredFolders.map((folder) => (
-                <tr key={folder.id} onClick={() => goToFolder(folder.id)} className="cursor-pointer hover:bg-accent">
-                  <td className="flex items-center gap-2 px-4 py-2.5 font-medium">
+                <tr key={folder.id} className="group hover:bg-accent">
+                  <td
+                    onClick={() => goToFolder(folder.id)}
+                    className="flex cursor-pointer items-center gap-2 px-4 py-2.5 font-medium"
+                  >
                     <Folder className="size-4 fill-amber-400/20 text-amber-500" /> {folder.name}
                   </td>
-                  <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">—</td>
-                  <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
+                  <td
+                    onClick={() => goToFolder(folder.id)}
+                    className="hidden cursor-pointer px-4 py-2.5 text-muted-foreground sm:table-cell"
+                  >
+                    —
+                  </td>
+                  <td
+                    onClick={() => goToFolder(folder.id)}
+                    className="hidden cursor-pointer px-4 py-2.5 text-muted-foreground sm:table-cell"
+                  >
                     {formatRelativeTime(folder.updatedAt)}
                   </td>
-                  <td />
+                  <td className="px-2 py-2.5 text-right">
+                    <FolderActionsMenu folder={folder} onChanged={() => invalidate(folderId)} />
+                  </td>
                 </tr>
               ))}
               {filteredFiles.map((file) => {

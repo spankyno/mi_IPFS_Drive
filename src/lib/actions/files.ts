@@ -8,6 +8,8 @@ import {
   renameFileSchema,
   moveFileSchema,
   deleteFileSchema,
+  deleteFolderSchema,
+  renameFolderSchema,
 } from "@/lib/validations/files";
 import { revalidatePath } from "next/cache";
 
@@ -220,6 +222,71 @@ export async function moveFileAction(input: unknown) {
     action: "move",
     file_id: parsed.data.fileId,
     metadata: {},
+  });
+
+  revalidatePath("/dashboard/files");
+  return { success: true };
+}
+
+/**
+ * Borra una carpeta. Por las FKs de la migración 0001: las subcarpetas se
+ * borran en cascada (parent_id ON DELETE CASCADE), y los archivos que
+ * estaban dentro de la carpeta (o de sus subcarpetas) NO se borran —
+ * quedan con folder_id = null, es decir, "suben" a la raíz del drive.
+ */
+export async function deleteFolderAction(input: unknown) {
+  const parsed = deleteFolderSchema.safeParse(input);
+  if (!parsed.success) return { error: "Solicitud de borrado inválida." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const { data: folder, error: fetchError } = await supabase
+    .from("folders")
+    .select("id, name")
+    .eq("id", parsed.data.folderId)
+    .single();
+
+  if (fetchError || !folder) return { error: "Carpeta no encontrada." };
+
+  const { error: deleteError } = await supabase.from("folders").delete().eq("id", folder.id);
+  if (deleteError) return { error: "No se pudo borrar la carpeta." };
+
+  await supabase.from("activity_log").insert({
+    owner_id: user.id,
+    action: "delete",
+    metadata: { folderName: folder.name },
+  });
+
+  revalidatePath("/dashboard/files");
+  return { success: true };
+}
+
+export async function renameFolderAction(input: unknown) {
+  const parsed = renameFolderSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Nombre inválido." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const { error } = await supabase
+    .from("folders")
+    .update({ name: parsed.data.name, updated_at: new Date().toISOString() })
+    .eq("id", parsed.data.folderId);
+
+  if (error) return { error: "No se pudo renombrar la carpeta." };
+
+  await supabase.from("activity_log").insert({
+    owner_id: user.id,
+    action: "rename",
+    folder_id: parsed.data.folderId,
+    metadata: { folderName: parsed.data.name },
   });
 
   revalidatePath("/dashboard/files");
