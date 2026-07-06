@@ -40,9 +40,25 @@ export interface ButtonProps
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, isLoading, disabled, children, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
+    // Radix Slot exige EXACTAMENTE un elemento hijo (para clonarle las props
+    // encima). Si le pasamos [isLoading && <Loader2/>, children], el array
+    // sigue teniendo 2 posiciones aunque la primera sea `false`, y Slot
+    // revienta con "Expected a single React element child". Por eso
+    // separamos completamente el render de asChild del render normal.
+    if (asChild) {
+      return (
+        <Slot
+          className={cn(buttonVariants({ variant, size, className }))}
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </Slot>
+      );
+    }
+
     return (
-      <Comp
+      <button
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         disabled={disabled || isLoading}
@@ -51,7 +67,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {isLoading && <Loader2 className="animate-spin" aria-hidden="true" />}
         {children}
-      </Comp>
+      </button>
     );
   }
 );
