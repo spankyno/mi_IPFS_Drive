@@ -34,7 +34,7 @@ export async function finalizeUploadAction(input: unknown) {
   } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado." };
 
-  const provider = process.env.IPFS_PINNING_PROVIDER ?? "filebase";
+  const provider = process.env.IPFS_PINNING_PROVIDER || "filebase";
   const adapter = getPinningAdapter();
 
   let cid: string;
