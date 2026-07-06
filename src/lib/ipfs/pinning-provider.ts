@@ -92,7 +92,7 @@ class NotImplementedAdapter implements PinningAdapter {
 }
 
 export function getPinningAdapter(): PinningAdapter {
-  const provider = (process.env.IPFS_PINNING_PROVIDER ?? "filebase") as PinningProvider;
+  const provider = (process.env.IPFS_PINNING_PROVIDER || "filebase") as PinningProvider;
 
   switch (provider) {
     case "filebase":
