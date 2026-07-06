@@ -1,15 +1,25 @@
-import { FolderOpen } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { getFolderContents, getFolderPath } from "@/lib/supabase/queries";
+import { FileExplorer } from "@/components/files/file-explorer";
 
-export default function FilesPage() {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-      <FolderOpen className="size-10 text-muted-foreground/40" />
-      <div>
-        <p className="font-medium">Gestión de archivos — Paso 4</p>
-        <p className="text-sm text-muted-foreground">
-          Aquí llega el upload con drag & drop, carpetas, vista grid/lista, búsqueda y preview.
-        </p>
-      </div>
-    </div>
-  );
+export default async function FilesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ folder?: string }>;
+}) {
+  const { folder } = await searchParams;
+  const folderId = folder ?? null;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const userId = user!.id;
+
+  const [contents, path] = await Promise.all([
+    getFolderContents(supabase, userId, folderId),
+    folderId ? getFolderPath(supabase, folderId) : Promise.resolve([]),
+  ]);
+
+  return <FileExplorer userId={userId} folderId={folderId} path={path} initialData={contents} />;
 }

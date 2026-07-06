@@ -1,5 +1,5 @@
 import type { Database } from "@/types/database";
-import type { DriveFile, ActivityLogEntry, StorageUsage } from "@/types/domain";
+import type { DriveFile, ActivityLogEntry, StorageUsage, DriveFolder } from "@/types/domain";
 import type { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import type { createClient as createServerSupabase } from "@/lib/supabase/server";
 
@@ -26,6 +26,7 @@ function mapFileRow(row: Database["public"]["Tables"]["files"]["Row"]): DriveFil
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     cid: row.cid,
+    storageKey: row.storage_key,
     pinningProvider: row.pinning_provider as DriveFile["pinningProvider"],
     isEncrypted: row.is_encrypted,
     encryptionIv: row.encryption_iv,
@@ -109,4 +110,60 @@ export async function getFoldersCount(supabase: TypedClient, userId: string): Pr
 
   if (error) throw error;
   return count ?? 0;
+}
+
+function mapFolderRow(row: Database["public"]["Tables"]["folders"]["Row"]): DriveFolder {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    parentId: row.parent_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** Carpetas y archivos directamente dentro de `folderId` (null = raíz). */
+export async function getFolderContents(
+  supabase: TypedClient,
+  userId: string,
+  folderId: string | null
+): Promise<{ folders: DriveFolder[]; files: DriveFile[] }> {
+  const [{ data: folderRows, error: foldersError }, { data: fileRows, error: filesError }] =
+    await Promise.all([
+      folderId
+        ? supabase.from("folders").select("*").eq("owner_id", userId).eq("parent_id", folderId)
+        : supabase.from("folders").select("*").eq("owner_id", userId).is("parent_id", null),
+      folderId
+        ? supabase.from("files").select("*").eq("owner_id", userId).eq("folder_id", folderId)
+        : supabase.from("files").select("*").eq("owner_id", userId).is("folder_id", null),
+    ]);
+
+  if (foldersError) throw foldersError;
+  if (filesError) throw filesError;
+
+  return {
+    folders: (folderRows ?? [])
+      .map(mapFolderRow)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    files: (fileRows ?? []).map(mapFileRow).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  };
+}
+
+/** Ruta de breadcrumb desde la raíz hasta `folderId` (inclusive), subiendo por parent_id. */
+export async function getFolderPath(supabase: TypedClient, folderId: string): Promise<DriveFolder[]> {
+  const path: DriveFolder[] = [];
+  let currentId: string | null = folderId;
+
+  // Los árboles de carpetas de un usuario son pequeños en la práctica;
+  // iterar uno a uno es más simple y suficientemente rápido que una CTE recursiva.
+  while (currentId) {
+    const { data, error } = await supabase.from("folders").select("*").eq("id", currentId).single();
+    if (error || !data) break;
+    const folder = mapFolderRow(data);
+    path.unshift(folder);
+    currentId = folder.parentId;
+  }
+
+  return path;
 }

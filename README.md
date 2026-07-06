@@ -50,13 +50,28 @@ pnpm install   # o npm install / yarn
 
 ### 2. Supabase (Auth + DB + Realtime)
 1. Crea un proyecto gratis en [supabase.com](https://supabase.com) (free tier: 500 MB DB, 50k usuarios activos/mes, Realtime incluido).
-2. En el SQL Editor del dashboard, ejecuta `supabase/migrations/0001_init.sql`.
+2. En el SQL Editor del dashboard, ejecuta `supabase/migrations/0001_init.sql` y luego `supabase/migrations/0002_add_storage_key.sql` (en ese orden).
 3. En **Authentication → Providers**, activa "Email" y asegúrate de que "Confirm email" y "Magic Link" estén habilitados.
 4. En **Authentication → URL Configuration**, añade `http://localhost:3000/auth/callback` (y tu dominio de producción) como Redirect URL. Esta misma URL de callback maneja magic links, confirmación de email **y** reset de contraseña.
 5. Copia `Project URL` y `anon public key` a tu `.env.local`.
 
 ### 3. Elegir un servicio de pinning IPFS
 Copia `.env.example` a `.env.local` y define `IPFS_PINNING_PROVIDER` + su API key. Ver comparativa abajo.
+
+**Importante — CORS en el bucket de Filebase:** el navegador sube el archivo **directamente** al endpoint S3 de Filebase (no pasa por nuestro servidor), así que el bucket necesita permitir peticiones `PUT` desde tu dominio. En el dashboard de Filebase, entra a tu bucket → **Settings → CORS** (o usa `aws s3api put-bucket-cors` si prefieres CLI) y añade una regla como:
+
+```json
+[
+  {
+    "AllowedOrigins": ["http://localhost:3000", "https://tu-dominio.vercel.app"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3000
+  }
+]
+```
+
+Sin esto, la subida fallará en el navegador con un error de CORS aunque la URL firmada sea válida.
 
 ### 4. Variables de entorno
 ```bash
@@ -109,6 +124,26 @@ Para mostrar imágenes/PDFs/video directamente en el navegador usamos `https://<
 
 ---
 
+## 🛡️ Nota de seguridad de dependencias
+
+Este proyecto fija **Next.js 15.5.18** y **React 19.2.6** deliberadamente. Ha habido dos rondas de parches críticos en RSC:
+
+1. **Diciembre 2025** — CVE-2025-55182 "React2Shell" (RCE crítico, CVSS 10.0) + correcciones de seguimiento CVE-2025-55183/55184/67779.
+2. **Mayo 2026** — 13 avisos adicionales (bypass de middleware/proxy, DoS incluyendo CVE-2026-23870, SSRF en upgrades de WebSocket, cache poisoning, XSS). Parcheado en Next.js `15.5.18` / `16.2.6` y `react-server-dom-*` `19.2.6`.
+
+**Vercel bloquea el deploy automáticamente** si detecta una versión de Next.js afectada por estos CVEs — si ves el error *"Vulnerable version of Next.js detected"*, comprueba que tu `package.json` tenga exactamente estas versiones. Dado el ritmo de estos parches, antes de cada deploy real merece la pena revisar https://vercel.com/changelog por si hay una versión más nueva.
+
+También fijamos **`@supabase/ssr` en `^0.12.0`**: versiones `0.5.x` (más antiguas) tienen tipos incompatibles con las versiones recientes de `@supabase/supabase-js` (2.9x+), lo que rompe silenciosamente la inferencia de tipos de `.select()` (todo termina tipado como `never`). Si actualizas `@supabase/supabase-js` en el futuro, actualiza `@supabase/ssr` a la última versión en el mismo commit.
+
+## 📊 Dashboard (Paso 3)
+
+- **Server Component** (`/dashboard/page.tsx`) hace todas las queries en paralelo (`Promise.all`) y pasa los datos como `initialData` a los componentes cliente — primer render instantáneo, sin loading spinners iniciales.
+- **`StorageUsageBar`**: barra de progreso con la vista SQL `storage_usage`, cambia a rojo y muestra aviso al llegar al 90% de la cuota.
+- **`StatsCards`**: archivos, espacio usado, carpetas, enlaces compartidos.
+- **`RecentFiles`**: grid de los últimos archivos subidos, con estado vacío accionable.
+- **`ActivityFeed`**: se hidrata con datos del servidor y luego se suscribe a `postgres_changes` de Supabase Realtime sobre `activity_log` — cualquier upload/share/delete aparece al instante sin recargar, incluso desde otra pestaña.
+- Todos los hooks (`use-storage-usage`, `use-recent-files`, `use-realtime-activity`) usan TanStack Query con `initialData`, así que no hay parpadeo entre el render del servidor y la hidratación del cliente.
+
 ## 🔑 Sistema de autenticación (Paso 2)
 
 Implementado con `@supabase/ssr` (cliente browser + server + middleware), Server Actions de React 19 (`useActionState`) y validación con Zod.
@@ -144,12 +179,25 @@ Implementado con `@supabase/ssr` (cliente browser + server + middleware), Server
 
 ---
 
+## 📤 Upload a IPFS (Paso 4)
+
+**Flujo de subida (subida directa navegador → Filebase, sin pasar por nuestro servidor):**
+
+1. El cliente pide una URL firmada a `POST /api/upload-token` (Route Handler), que primero verifica la sesión con Supabase y luego genera un `PutObjectCommand` firmado (5 min de validez) contra el endpoint S3 de Filebase. La *key* del objeto se genera server-side como `{userId}/{uuid}-{nombre-sanitizado}`.
+2. El navegador sube el archivo con `XMLHttpRequest` (no `fetch`) directamente a esa URL — es la única forma de tener eventos de progreso reales (`xhr.upload.onprogress`) en el navegador.
+3. Al terminar, el cliente llama al Server Action `finalizeUploadAction`, que hace un `HeadObject` contra Filebase para leer el CID recién asignado (header `x-amz-meta-cid`), inserta la fila en `files` y registra la actividad — todo esto server-side, sin depender de que el navegador pueda leer ese header (Filebase no expone `x-amz-meta-*` a JS de navegador por CORS salvo que lo configures explícitamente).
+4. TanStack Query invalida `folder-contents`, `storage-usage` y `recent-files` para reflejar el cambio al instante.
+
+**Carpetas**: jerarquía real vía `parent_id` en Postgres, navegable con breadcrumb (`?folder=<id>` en la URL). **Borrado**: `deleteFileAction` borra primero el objeto en Filebase (`DeleteObjectCommand`, lo despinea de IPFS) y luego la fila en Postgres.
+
+**Nota:** el filtro de este paso es solo por nombre dentro de la carpeta actual. Búsqueda avanzada (por tags, en todo el drive) y la previsualización enriquecida (modal con imagen/video/PDF embebido) llegan en el Paso 5.
+
 ## 🗺️ Roadmap de implementación (este build es iterativo)
 
 - [x] 1. Estructura base + configuración + README
-- [x] 2. Auth: registro, login, magic links, reset de contraseña, middleware de rutas protegidas (**este paso**)
-- [ ] 3. Dashboard: stats, storage bar, activity feed
-- [ ] 4. Upload flow: drag & drop, carpetas, progreso
+- [x] 2. Auth: registro, login, magic links, reset de contraseña, middleware de rutas protegidas
+- [x] 3. Dashboard: stats, storage bar, activity feed en tiempo real
+- [x] 4. Upload flow: drag & drop, carpetas, progreso (**este paso**)
 - [ ] 5. Previews, búsqueda avanzada, tags
 - [ ] 6. Compartir (público/privado) + actividad realtime
 - [ ] 7. Optimización, seguridad, pulido UX final

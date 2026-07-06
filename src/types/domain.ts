@@ -30,6 +30,7 @@ export interface DriveFile {
   mimeType: string;
   sizeBytes: number;
   cid: string;
+  storageKey: string;
   pinningProvider: PinningProvider;
   isEncrypted: boolean;
   encryptionIv: string | null;

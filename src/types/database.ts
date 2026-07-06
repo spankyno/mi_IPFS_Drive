@@ -57,6 +57,7 @@ export interface Database {
           mime_type: string;
           size_bytes: number;
           cid: string;
+          storage_key: string;
           pinning_provider: string;
           is_encrypted: boolean;
           encryption_iv: string | null;
@@ -72,6 +73,7 @@ export interface Database {
           mime_type: string;
           size_bytes: number;
           cid: string;
+          storage_key: string;
           pinning_provider: string;
         };
         Update: Partial<Database["public"]["Tables"]["files"]["Row"]>;
