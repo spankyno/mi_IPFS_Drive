@@ -11,6 +11,9 @@ import {
   deleteFolderSchema,
   renameFolderSchema,
   updateTagsSchema,
+  setVisibilitySchema,
+  createShareSchema,
+  revokeShareSchema,
 } from "@/lib/validations/files";
 import { revalidatePath } from "next/cache";
 
@@ -310,6 +313,112 @@ export async function updateTagsAction(input: unknown) {
     .eq("id", parsed.data.fileId);
 
   if (error) return { error: "No se pudieron actualizar las tags." };
+
+  revalidatePath("/dashboard/files");
+  return { success: true };
+}
+
+/** Alterna la visibilidad de un archivo: 'private' | 'public' | 'unlisted'. En 'public', el enlace por CID (`/share/cid/<cid>`) es accesible por cualquiera. */
+export async function setVisibilityAction(input: unknown) {
+  const parsed = setVisibilitySchema.safeParse(input);
+  if (!parsed.success) return { error: "Solicitud de visibilidad inválida." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const { data: file, error } = await supabase
+    .from("files")
+    .update({ visibility: parsed.data.visibility })
+    .eq("id", parsed.data.fileId)
+    .select("id, cid, name")
+    .single();
+
+  if (error || !file) return { error: "No se pudo actualizar la visibilidad." };
+
+  if (parsed.data.visibility === "public") {
+    await supabase.from("activity_log").insert({
+      owner_id: user.id,
+      action: "share",
+      file_id: file.id,
+      metadata: { fileName: file.name },
+    });
+  }
+
+  revalidatePath("/dashboard/files");
+  return { success: true, cid: file.cid };
+}
+
+/**
+ * Crea un enlace privado revocable (token aleatorio, vía la tabla
+ * `shares`). A diferencia de marcar el archivo como 'public', esto NO
+ * cambia la visibilidad del archivo — sigue siendo privado salvo para
+ * quien tenga el enlace exacto con el token (resuelto vía la función RPC
+ * `get_shared_file`, ver migración 0003).
+ */
+export async function createShareAction(input: unknown) {
+  const parsed = createShareSchema.safeParse(input);
+  if (!parsed.success) return { error: "Solicitud de compartir inválida." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const expiresAt = parsed.data.expiresInDays
+    ? new Date(Date.now() + parsed.data.expiresInDays * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
+  const { data: file } = await supabase.from("files").select("name").eq("id", parsed.data.fileId).single();
+
+  const { data: share, error } = await supabase
+    .from("shares")
+    .insert({
+      file_id: parsed.data.fileId,
+      owner_id: user.id,
+      permission: parsed.data.permission,
+      expires_at: expiresAt,
+    })
+    .select("id, share_token, permission, expires_at, created_at")
+    .single();
+
+  if (error || !share) return { error: "No se pudo crear el enlace privado." };
+
+  await supabase.from("activity_log").insert({
+    owner_id: user.id,
+    action: "share",
+    file_id: parsed.data.fileId,
+    metadata: { fileName: file?.name ?? "un archivo" },
+  });
+
+  revalidatePath("/dashboard/files");
+  return {
+    success: true,
+    share: {
+      id: share.id,
+      shareToken: share.share_token,
+      permission: share.permission,
+      expiresAt: share.expires_at,
+      createdAt: share.created_at,
+    },
+  };
+}
+
+export async function revokeShareAction(input: unknown) {
+  const parsed = revokeShareSchema.safeParse(input);
+  if (!parsed.success) return { error: "Solicitud de revocación inválida." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const { error } = await supabase.from("shares").delete().eq("id", parsed.data.shareId);
+  if (error) return { error: "No se pudo revocar el enlace." };
 
   revalidatePath("/dashboard/files");
   return { success: true };

@@ -24,6 +24,21 @@ export const updateTagsSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20),
 });
 
+export const setVisibilitySchema = z.object({
+  fileId: z.string().uuid(),
+  visibility: z.enum(["private", "public", "unlisted"]),
+});
+
+export const createShareSchema = z.object({
+  fileId: z.string().uuid(),
+  permission: z.enum(["view", "download"]).default("view"),
+  expiresInDays: z.number().int().positive().max(365).nullable(),
+});
+
+export const revokeShareSchema = z.object({
+  shareId: z.string().uuid(),
+});
+
 export const moveFileSchema = z.object({
   fileId: z.string().uuid(),
   folderId: z.string().uuid().nullable(),
@@ -50,3 +65,6 @@ export type DeleteFileInput = z.infer<typeof deleteFileSchema>;
 export type DeleteFolderInput = z.infer<typeof deleteFolderSchema>;
 export type RenameFolderInput = z.infer<typeof renameFolderSchema>;
 export type UpdateTagsInput = z.infer<typeof updateTagsSchema>;
+export type SetVisibilityInput = z.infer<typeof setVisibilitySchema>;
+export type CreateShareInput = z.infer<typeof createShareSchema>;
+export type RevokeShareInput = z.infer<typeof revokeShareSchema>;

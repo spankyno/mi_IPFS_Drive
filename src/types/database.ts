@@ -118,7 +118,15 @@ export interface Database {
         Relationships: [];
       };
     };
-    Functions: Record<string, never>;
+    Functions: {
+      get_shared_file: {
+        Args: { p_token: string };
+        Returns: (Database["public"]["Tables"]["files"]["Row"] & {
+          share_permission: "view" | "download";
+          share_expires_at: string | null;
+        })[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

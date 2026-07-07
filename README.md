@@ -50,7 +50,7 @@ pnpm install   # o npm install / yarn
 
 ### 2. Supabase (Auth + DB + Realtime)
 1. Crea un proyecto gratis en [supabase.com](https://supabase.com) (free tier: 500 MB DB, 50k usuarios activos/mes, Realtime incluido).
-2. En el SQL Editor del dashboard, ejecuta `supabase/migrations/0001_init.sql` y luego `supabase/migrations/0002_add_storage_key.sql` (en ese orden).
+2. En el SQL Editor del dashboard, ejecuta en orden: `supabase/migrations/0001_init.sql`, `0002_add_storage_key.sql` y **`0003_share_function.sql`** (esta última corrige un fallo de seguridad real de la 0001 — ver nota más abajo — así que no la saltes aunque no vayas a usar la función de compartir).
 3. En **Authentication → Providers**, activa "Email" y asegúrate de que "Confirm email" y "Magic Link" estén habilitados.
 4. En **Authentication → URL Configuration**, añade `http://localhost:3000/auth/callback` (y tu dominio de producción) como Redirect URL. Esta misma URL de callback maneja magic links, confirmación de email **y** reset de contraseña.
 5. Copia `Project URL` y `anon public key` a tu `.env.local`.
@@ -201,14 +201,25 @@ Implementado con `@supabase/ssr` (cliente browser + server + middleware), Server
 - **Búsqueda avanzada**: en cuanto escribes algo o seleccionas una tag en el filtro, la búsqueda deja de limitarse a la carpeta actual y consulta **todo tu drive** (`searchFiles`, por nombre con `ILIKE` y por tags con el operador `overlaps` de Postgres). Sin texto ni tags activas, el buscador vuelve a filtrar solo dentro de la carpeta actual (más rápido, sin round-trip al servidor).
 - **Filtro de tags**: dropdown con todas las tags que has usado alguna vez (`getAllTags`), selección múltiple — se combina con la búsqueda por texto si ambas están activas.
 
+## 🔗 Compartir archivos (Paso 6)
+
+> ⚠️ **Corrección de seguridad importante si ya tenías la app desplegada**: la migración 0001 incluía una política RLS en `shares` con `using (true)` que, contra lo que decía su nombre, permitía a **cualquiera leer la tabla `shares` completa de todos los usuarios** (tokens, permisos, owner_id — de cualquiera, no solo los tuyos). La migración `0003_share_function.sql` la elimina. Ejecútala cuanto antes si tu app ya está en producción, aunque no vayas a usar la función de compartir todavía.
+
+Dos formas de compartir, con comportamiento distinto a propósito:
+
+- **Enlace público** (`/share/cid/<cid>`): activa el toggle en el diálogo de compartir → pone `files.visibility = 'public'`. Cualquiera con el enlace lo ve, sin iniciar sesión — es una URL estable mientras el toggle esté activo.
+- **Enlace privado revocable** (`/share/token/<token>`): el archivo **sigue siendo privado**; se genera un token aleatorio en la tabla `shares` con permiso (`ver` / `ver y descargar`) y caducidad opcional. Se resuelve mediante la función Postgres `get_shared_file` (`security definer`, migración 0003), que valida el token exacto sin necesidad de abrir el acceso de lectura a toda la tabla — así podemos mantener `files` con RLS estricto y aun así servir el archivo a un visitante anónimo con el token correcto. Puedes revocarlo en cualquier momento desde el mismo diálogo.
+
+**Importante sobre "privado" en IPFS**: una vez un archivo está en IPFS, cualquiera que consiga el CID directamente (no a través de nuestra app) puede pedirlo a cualquier gateway público — eso es inherente a IPFS, no algo que la app pueda evitar. Lo que sí controla la app es la *distribución* del CID: sin enlace público ni token válido, nadie fuera de ti llega a conocer el CID por nuestra vía. Si necesitas confidencialidad real incluso frente a quien intercepte el CID, usa la encriptación cliente-side opcional (`NEXT_PUBLIC_ENABLE_CLIENT_ENCRYPTION`, ver sección de seguridad) — pendiente de implementar en el flujo de subida.
+
 ## 🗺️ Roadmap de implementación (este build es iterativo)
 
 - [x] 1. Estructura base + configuración + README
 - [x] 2. Auth: registro, login, magic links, reset de contraseña, middleware de rutas protegidas
 - [x] 3. Dashboard: stats, storage bar, activity feed en tiempo real
 - [x] 4. Upload flow: drag & drop, carpetas, progreso
-- [x] 5. Previews, búsqueda avanzada, tags (**este paso**)
-- [ ] 6. Compartir (público/privado) + actividad realtime
+- [x] 5. Previews, búsqueda avanzada, tags
+- [x] 6. Compartir (público/privado) + actividad realtime (**este paso**)
 - [ ] 7. Optimización, seguridad, pulido UX final
 
 Vamos a construirlo por bloques, confirmando contigo antes de avanzar al siguiente. 👇

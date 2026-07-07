@@ -1,5 +1,5 @@
 import type { Database } from "@/types/database";
-import type { DriveFile, ActivityLogEntry, StorageUsage, DriveFolder } from "@/types/domain";
+import type { DriveFile, ActivityLogEntry, StorageUsage, DriveFolder, FileShare } from "@/types/domain";
 import type { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import type { createClient as createServerSupabase } from "@/lib/supabase/server";
 
@@ -202,4 +202,25 @@ export async function getAllTags(supabase: TypedClient, userId: string): Promise
     for (const tag of row.tags ?? []) unique.add(tag);
   }
   return Array.from(unique).sort((a, b) => a.localeCompare(b));
+}
+
+/** Enlaces privados activos de un archivo (para el diálogo de compartir). */
+export async function getSharesForFile(supabase: TypedClient, fileId: string): Promise<FileShare[]> {
+  const { data, error } = await supabase
+    .from("shares")
+    .select("*")
+    .eq("file_id", fileId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    fileId: row.file_id,
+    ownerId: row.owner_id,
+    shareToken: row.share_token,
+    permission: row.permission,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  }));
 }

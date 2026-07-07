@@ -13,6 +13,7 @@ import { FileBreadcrumb } from "@/components/files/file-breadcrumb";
 import { FileActionsMenu } from "@/components/files/file-actions-menu";
 import { FolderActionsMenu } from "@/components/files/folder-actions-menu";
 import { FilePreviewDialog } from "@/components/files/file-preview-dialog";
+import { ShareDialog } from "@/components/files/share-dialog";
 import { TagFilter } from "@/components/files/tag-filter";
 import { moveFileAction } from "@/lib/actions/files";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
   const [search, setSearch] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [previewFile, setPreviewFile] = useState<DriveFile | null>(null);
+  const [shareFile, setShareFile] = useState<DriveFile | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
 
@@ -279,6 +281,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
                     file={file}
                     gatewayUrl={`${GATEWAY}/${file.cid}`}
                     onDeleted={handleFileChanged}
+                    onShare={() => setShareFile(file)}
                   />
                 </div>
                 <button onClick={() => setPreviewFile(file)} className="flex flex-col items-center gap-2">
@@ -377,6 +380,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
                         file={file}
                         gatewayUrl={`${GATEWAY}/${file.cid}`}
                         onDeleted={handleFileChanged}
+                        onShare={() => setShareFile(file)}
                       />
                     </td>
                   </tr>
@@ -394,6 +398,19 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
         onClose={() => setPreviewFile(null)}
         onChanged={handleFileChanged}
         onDeleted={handleFileDeleted}
+        onShare={(file) => {
+          setPreviewFile(null);
+          setShareFile(file);
+        }}
+      />
+
+      <ShareDialog
+        file={shareFile}
+        onClose={() => setShareFile(null)}
+        onVisibilityChanged={(visibility) => {
+          setShareFile((prev) => (prev ? { ...prev, visibility } : prev));
+          handleFileChanged();
+        }}
       />
     </div>
   );

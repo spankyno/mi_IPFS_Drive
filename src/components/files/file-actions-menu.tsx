@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { MoreVertical, ExternalLink, Copy, Trash2, Loader2 } from "lucide-react";
+import { MoreVertical, ExternalLink, Copy, Trash2, Loader2, Share2 } from "lucide-react";
 import { deleteFileAction } from "@/lib/actions/files";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
@@ -12,10 +12,12 @@ export function FileActionsMenu({
   file,
   gatewayUrl,
   onDeleted,
+  onShare,
 }: {
   file: DriveFile;
   gatewayUrl: string;
   onDeleted: () => void;
+  onShare: () => void;
 }) {
   const [isDeleting, setIsDeleting] = React.useState(false);
 
@@ -60,6 +62,12 @@ export function FileActionsMenu({
             "data-[state=open]:animate-fade-in"
           )}
         >
+          <DropdownMenu.Item
+            onSelect={onShare}
+            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent"
+          >
+            <Share2 className="size-4" /> Compartir
+          </DropdownMenu.Item>
           <DropdownMenu.Item asChild>
             <a
               href={gatewayUrl}

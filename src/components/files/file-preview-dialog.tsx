@@ -25,6 +25,7 @@ import {
   Check,
   X,
   Loader2,
+  Share2,
 } from "lucide-react";
 import type { DriveFile } from "@/types/domain";
 
@@ -42,9 +43,10 @@ interface FilePreviewDialogProps {
   onClose: () => void;
   onChanged: () => void;
   onDeleted: () => void;
+  onShare: (file: DriveFile) => void;
 }
 
-export function FilePreviewDialog({ file, onClose, onChanged, onDeleted }: FilePreviewDialogProps) {
+export function FilePreviewDialog({ file, onClose, onChanged, onDeleted, onShare }: FilePreviewDialogProps) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
   const [isSavingName, setIsSavingName] = useState(false);
@@ -213,6 +215,9 @@ export function FilePreviewDialog({ file, onClose, onChanged, onDeleted }: FileP
             </dl>
 
             <div className="flex flex-col gap-2 pt-2">
+              <Button variant="outline" onClick={() => onShare(file)}>
+                <Share2 className="size-4" /> Compartir
+              </Button>
               <Button variant="outline" asChild>
                 <a href={gatewayUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="size-4" /> Abrir en IPFS
