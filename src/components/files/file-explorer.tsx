@@ -3,13 +3,17 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
+import { useQueryClient } from "@tanstack/react-query";
 import { useFolderContents, useInvalidateFolderContents } from "@/hooks/use-folder-contents";
 import { useFileUpload } from "@/hooks/use-file-upload";
+import { useSearchFiles, useAllTags } from "@/hooks/use-search-files";
 import { UploadProgressPanel } from "@/components/files/upload-progress-panel";
 import { CreateFolderDialog } from "@/components/files/create-folder-dialog";
 import { FileBreadcrumb } from "@/components/files/file-breadcrumb";
 import { FileActionsMenu } from "@/components/files/file-actions-menu";
 import { FolderActionsMenu } from "@/components/files/folder-actions-menu";
+import { FilePreviewDialog } from "@/components/files/file-preview-dialog";
+import { TagFilter } from "@/components/files/tag-filter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatBytes, formatRelativeTime } from "@/lib/utils/format";
@@ -25,6 +29,7 @@ import {
   List,
   Search,
   UploadCloud,
+  X,
 } from "lucide-react";
 import type { DriveFile, DriveFolder } from "@/types/domain";
 
@@ -46,12 +51,19 @@ interface FileExplorerProps {
 
 export function FileExplorer({ userId, folderId, path, initialData }: FileExplorerProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [view, setView] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [previewFile, setPreviewFile] = useState<DriveFile | null>(null);
 
   const { data } = useFolderContents(userId, folderId, initialData);
   const invalidate = useInvalidateFolderContents(userId);
   const { tasks, uploadFiles, dismissTask } = useFileUpload(userId, folderId);
+  const { data: allTags = [] } = useAllTags(userId);
+
+  const isSearching = search.trim() !== "" || activeTags.length > 0;
+  const { data: searchResults = [], isFetching: isSearchLoading } = useSearchFiles(userId, search, activeTags);
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     noClick: true,
@@ -61,19 +73,38 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
     },
   });
 
-  const filteredFolders = useMemo(
+  // Fuera de modo búsqueda, el buscador solo filtra dentro de la carpeta actual (comportamiento local, instantáneo).
+  const localFilteredFolders = useMemo(
     () => data.folders.filter((f) => f.name.toLowerCase().includes(search.toLowerCase())),
     [data.folders, search]
   );
-  const filteredFiles = useMemo(
+  const localFilteredFiles = useMemo(
     () => data.files.filter((f) => f.name.toLowerCase().includes(search.toLowerCase())),
     [data.files, search]
   );
 
-  const isEmpty = filteredFolders.length === 0 && filteredFiles.length === 0;
+  const displayedFolders = isSearching ? [] : localFilteredFolders;
+  const displayedFiles = isSearching ? searchResults : localFilteredFiles;
+  const isEmpty = displayedFolders.length === 0 && displayedFiles.length === 0 && !isSearchLoading;
 
   function goToFolder(id: string | null) {
     router.push(id ? `/dashboard/files?folder=${id}` : "/dashboard/files");
+  }
+
+  function clearSearch() {
+    setSearch("");
+    setActiveTags([]);
+  }
+
+  function handleFileChanged() {
+    invalidate(folderId);
+    queryClient.invalidateQueries({ queryKey: ["search-files", userId] });
+    queryClient.invalidateQueries({ queryKey: ["all-tags", userId] });
+  }
+
+  function handleFileDeleted() {
+    setPreviewFile(null);
+    handleFileChanged();
   }
 
   return (
@@ -99,10 +130,18 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar en esta carpeta…"
+              placeholder="Buscar en todo tu drive…"
               className="pl-8"
             />
           </div>
+
+          <TagFilter allTags={allTags} selected={activeTags} onChange={setActiveTags} />
+
+          {isSearching && (
+            <Button variant="ghost" onClick={clearSearch}>
+              <X className="size-4" /> Limpiar
+            </Button>
+          )}
 
           <CreateFolderDialog parentId={folderId} />
 
@@ -136,13 +175,21 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
             </button>
           </div>
         </div>
+
+        {isSearching && (
+          <p className="text-sm text-muted-foreground">
+            {isSearchLoading
+              ? "Buscando en todo tu drive…"
+              : `${searchResults.length} resultado${searchResults.length === 1 ? "" : "s"} en todo tu drive`}
+          </p>
+        )}
       </div>
 
       {isEmpty ? (
-        <EmptyState hasSearch={search.length > 0} onUploadClick={open} />
+        <EmptyState hasSearch={isSearching} onUploadClick={open} />
       ) : view === "grid" ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {filteredFolders.map((folder) => (
+          {displayedFolders.map((folder) => (
             <div
               key={folder.id}
               className="group relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors hover:border-primary/40 hover:bg-accent"
@@ -156,7 +203,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
               </button>
             </div>
           ))}
-          {filteredFiles.map((file) => {
+          {displayedFiles.map((file) => {
             const Icon = iconForMime(file.mimeType);
             return (
               <div
@@ -167,19 +214,23 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
                   <FileActionsMenu
                     file={file}
                     gatewayUrl={`${GATEWAY}/${file.cid}`}
-                    onDeleted={() => invalidate(folderId)}
+                    onDeleted={handleFileChanged}
                   />
                 </div>
-                <a
-                  href={`${GATEWAY}/${file.cid}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex flex-col items-center gap-2"
-                >
+                <button onClick={() => setPreviewFile(file)} className="flex flex-col items-center gap-2">
                   <Icon className="size-9 text-muted-foreground group-hover:text-primary" />
                   <p className="w-full max-w-32 truncate text-sm font-medium">{file.name}</p>
                   <p className="text-xs text-muted-foreground">{formatBytes(file.sizeBytes)}</p>
-                </a>
+                  {file.tags.length > 0 && (
+                    <div className="flex flex-wrap justify-center gap-1">
+                      {file.tags.slice(0, 2).map((tag) => (
+                        <span key={tag} className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </button>
               </div>
             );
           })}
@@ -196,7 +247,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filteredFolders.map((folder) => (
+              {displayedFolders.map((folder) => (
                 <tr key={folder.id} className="group hover:bg-accent">
                   <td
                     onClick={() => goToFolder(folder.id)}
@@ -221,19 +272,20 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
                   </td>
                 </tr>
               ))}
-              {filteredFiles.map((file) => {
+              {displayedFiles.map((file) => {
                 const Icon = iconForMime(file.mimeType);
                 return (
                   <tr key={file.id} className="group hover:bg-accent">
                     <td className="px-4 py-2.5">
-                      <a
-                        href={`${GATEWAY}/${file.cid}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 font-medium"
-                      >
+                      <button onClick={() => setPreviewFile(file)} className="flex items-center gap-2 font-medium">
                         <Icon className="size-4 text-muted-foreground" /> {file.name}
-                      </a>
+                        {file.tags.length > 0 && (
+                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                            {file.tags[0]}
+                            {file.tags.length > 1 ? ` +${file.tags.length - 1}` : ""}
+                          </span>
+                        )}
+                      </button>
                     </td>
                     <td className="hidden px-4 py-2.5 text-muted-foreground sm:table-cell">
                       {formatBytes(file.sizeBytes)}
@@ -245,7 +297,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
                       <FileActionsMenu
                         file={file}
                         gatewayUrl={`${GATEWAY}/${file.cid}`}
-                        onDeleted={() => invalidate(folderId)}
+                        onDeleted={handleFileChanged}
                       />
                     </td>
                   </tr>
@@ -257,6 +309,13 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
       )}
 
       <UploadProgressPanel tasks={tasks} onDismiss={dismissTask} />
+
+      <FilePreviewDialog
+        file={previewFile}
+        onClose={() => setPreviewFile(null)}
+        onChanged={handleFileChanged}
+        onDeleted={handleFileDeleted}
+      />
     </div>
   );
 }

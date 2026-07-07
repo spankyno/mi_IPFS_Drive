@@ -167,3 +167,39 @@ export async function getFolderPath(supabase: TypedClient, folderId: string): Pr
 
   return path;
 }
+
+/**
+ * Búsqueda avanzada: por nombre (ILIKE, en todo el drive, no solo la
+ * carpeta actual) y/o por tags (coincide si el archivo tiene AL MENOS
+ * una de las tags pedidas — operador `overlaps` de Postgres sobre arrays).
+ */
+export async function searchFiles(
+  supabase: TypedClient,
+  userId: string,
+  filters: { query?: string; tags?: string[] }
+): Promise<DriveFile[]> {
+  let builder = supabase.from("files").select("*").eq("owner_id", userId);
+
+  if (filters.query && filters.query.trim() !== "") {
+    builder = builder.ilike("name", `%${filters.query.trim()}%`);
+  }
+  if (filters.tags && filters.tags.length > 0) {
+    builder = builder.overlaps("tags", filters.tags);
+  }
+
+  const { data, error } = await builder.order("created_at", { ascending: false }).limit(200);
+  if (error) throw error;
+  return (data ?? []).map(mapFileRow);
+}
+
+/** Todas las tags distintas que el usuario ha usado, para el filtro de tags. */
+export async function getAllTags(supabase: TypedClient, userId: string): Promise<string[]> {
+  const { data, error } = await supabase.from("files").select("tags").eq("owner_id", userId);
+  if (error) throw error;
+
+  const unique = new Set<string>();
+  for (const row of data ?? []) {
+    for (const tag of row.tags ?? []) unique.add(tag);
+  }
+  return Array.from(unique).sort((a, b) => a.localeCompare(b));
+}

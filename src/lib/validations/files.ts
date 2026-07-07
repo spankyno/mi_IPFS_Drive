@@ -19,6 +19,11 @@ export const renameFileSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio").max(255),
 });
 
+export const updateTagsSchema = z.object({
+  fileId: z.string().uuid(),
+  tags: z.array(z.string().min(1).max(40)).max(20),
+});
+
 export const moveFileSchema = z.object({
   fileId: z.string().uuid(),
   folderId: z.string().uuid().nullable(),
@@ -44,3 +49,4 @@ export type MoveFileInput = z.infer<typeof moveFileSchema>;
 export type DeleteFileInput = z.infer<typeof deleteFileSchema>;
 export type DeleteFolderInput = z.infer<typeof deleteFolderSchema>;
 export type RenameFolderInput = z.infer<typeof renameFolderSchema>;
+export type UpdateTagsInput = z.infer<typeof updateTagsSchema>;

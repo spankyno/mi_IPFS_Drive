@@ -192,13 +192,20 @@ Implementado con `@supabase/ssr` (cliente browser + server + middleware), Server
 
 **Nota:** el filtro de este paso es solo por nombre dentro de la carpeta actual. Búsqueda avanzada (por tags, en todo el drive) y la previsualización enriquecida (modal con imagen/video/PDF embebido) llegan en el Paso 5.
 
+## 🔍 Preview, búsqueda y tags (Paso 5)
+
+- **Preview modal**: al hacer clic en un archivo (grid o lista) se abre un modal con vista embebida — `<img>` para imágenes, `<video controls>` para vídeo, `<iframe>` para PDF, y un fallback genérico con enlace a IPFS para el resto de tipos. Desde ahí también puedes renombrar, editar tags, copiar el enlace o eliminar, sin salir del modal.
+- **Tags**: editor de chips (`TagInput`) — Enter o coma para añadir, click en la X para quitar. Se guardan con `updateTagsAction` en cuanto cambian, sin botón de "guardar" aparte.
+- **Búsqueda avanzada**: en cuanto escribes algo o seleccionas una tag en el filtro, la búsqueda deja de limitarse a la carpeta actual y consulta **todo tu drive** (`searchFiles`, por nombre con `ILIKE` y por tags con el operador `overlaps` de Postgres). Sin texto ni tags activas, el buscador vuelve a filtrar solo dentro de la carpeta actual (más rápido, sin round-trip al servidor).
+- **Filtro de tags**: dropdown con todas las tags que has usado alguna vez (`getAllTags`), selección múltiple — se combina con la búsqueda por texto si ambas están activas.
+
 ## 🗺️ Roadmap de implementación (este build es iterativo)
 
 - [x] 1. Estructura base + configuración + README
 - [x] 2. Auth: registro, login, magic links, reset de contraseña, middleware de rutas protegidas
 - [x] 3. Dashboard: stats, storage bar, activity feed en tiempo real
-- [x] 4. Upload flow: drag & drop, carpetas, progreso (**este paso**)
-- [ ] 5. Previews, búsqueda avanzada, tags
+- [x] 4. Upload flow: drag & drop, carpetas, progreso
+- [x] 5. Previews, búsqueda avanzada, tags (**este paso**)
 - [ ] 6. Compartir (público/privado) + actividad realtime
 - [ ] 7. Optimización, seguridad, pulido UX final
 

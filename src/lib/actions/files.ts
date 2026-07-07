@@ -10,6 +10,7 @@ import {
   deleteFileSchema,
   deleteFolderSchema,
   renameFolderSchema,
+  updateTagsSchema,
 } from "@/lib/validations/files";
 import { revalidatePath } from "next/cache";
 
@@ -288,6 +289,27 @@ export async function renameFolderAction(input: unknown) {
     folder_id: parsed.data.folderId,
     metadata: { folderName: parsed.data.name },
   });
+
+  revalidatePath("/dashboard/files");
+  return { success: true };
+}
+
+export async function updateTagsAction(input: unknown) {
+  const parsed = updateTagsSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Tags inválidas." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado." };
+
+  const { error } = await supabase
+    .from("files")
+    .update({ tags: parsed.data.tags })
+    .eq("id", parsed.data.fileId);
+
+  if (error) return { error: "No se pudieron actualizar las tags." };
 
   revalidatePath("/dashboard/files");
   return { success: true };
