@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "ipfs.io", pathname: "/ipfs/**" },
+      { protocol: "https", hostname: "ipfs.filebase.io", pathname: "/ipfs/**" }, // gateway público de Filebase, peereado directo con sus nodos
       { protocol: "https", hostname: "*.ipfs.w3s.link", pathname: "/**" }, // web3.storage / Filebase gateway
       { protocol: "https", hostname: "gateway.pinata.cloud", pathname: "/ipfs/**" },
       { protocol: "https", hostname: "*.4everland.io", pathname: "/**" },

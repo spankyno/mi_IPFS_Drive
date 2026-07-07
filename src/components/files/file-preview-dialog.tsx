@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import type { DriveFile } from "@/types/domain";
 
-const GATEWAY = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL ?? "https://ipfs.io/ipfs";
+const GATEWAY = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL ?? "https://ipfs.filebase.io/ipfs";
 
 function iconForMime(mimeType: string) {
   if (mimeType.startsWith("image/")) return FileImage;

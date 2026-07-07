@@ -59,7 +59,7 @@ class FilebaseAdapter implements PinningAdapter {
   }
 
   getGatewayUrl(cid: string): string {
-    const gateway = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL ?? "https://ipfs.io/ipfs";
+    const gateway = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL ?? "https://ipfs.filebase.io/ipfs";
     return `${gateway}/${cid}`;
   }
 }

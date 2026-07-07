@@ -14,6 +14,8 @@ import { FileActionsMenu } from "@/components/files/file-actions-menu";
 import { FolderActionsMenu } from "@/components/files/folder-actions-menu";
 import { FilePreviewDialog } from "@/components/files/file-preview-dialog";
 import { TagFilter } from "@/components/files/tag-filter";
+import { moveFileAction } from "@/lib/actions/files";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatBytes, formatRelativeTime } from "@/lib/utils/format";
@@ -33,7 +35,7 @@ import {
 } from "lucide-react";
 import type { DriveFile, DriveFolder } from "@/types/domain";
 
-const GATEWAY = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL ?? "https://ipfs.io/ipfs";
+const GATEWAY = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL ?? "https://ipfs.filebase.io/ipfs";
 
 function iconForMime(mimeType: string) {
   if (mimeType.startsWith("image/")) return FileImage;
@@ -56,6 +58,8 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
   const [search, setSearch] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [previewFile, setPreviewFile] = useState<DriveFile | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
 
   const { data } = useFolderContents(userId, folderId, initialData);
   const invalidate = useInvalidateFolderContents(userId);
@@ -107,6 +111,54 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
     handleFileChanged();
   }
 
+  // --- Drag & drop para MOVER archivos existentes a una carpeta (distinto
+  // del dropzone de arriba, que sirve para SUBIR archivos nuevos del SO) ---
+  const FILE_DRAG_MIME = "application/x-mi-ipfs-drive-file-id";
+
+  function handleFileDragStart(e: React.DragEvent, file: DriveFile) {
+    e.dataTransfer.setData(FILE_DRAG_MIME, file.id);
+    e.dataTransfer.effectAllowed = "move";
+    setDraggingFileId(file.id);
+  }
+
+  function handleFileDragEnd() {
+    setDraggingFileId(null);
+    setDragOverFolderId(null);
+  }
+
+  function handleFolderDragOver(e: React.DragEvent, targetFolderId: string) {
+    if (!e.dataTransfer.types.includes(FILE_DRAG_MIME)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFolderId(targetFolderId);
+  }
+
+  function handleFolderDragLeave(targetFolderId: string) {
+    setDragOverFolderId((current) => (current === targetFolderId ? null : current));
+  }
+
+  async function handleMoveFile(fileId: string, targetFolderId: string | null) {
+    const result = await moveFileAction({ fileId, folderId: targetFolderId });
+    if (result.error) {
+      toast.error("No se pudo mover el archivo", { description: result.error });
+    } else {
+      toast.success("Archivo movido");
+      handleFileChanged();
+    }
+  }
+
+  async function handleFolderDrop(e: React.DragEvent, targetFolderId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverFolderId(null);
+    setDraggingFileId(null);
+
+    const fileId = e.dataTransfer.getData(FILE_DRAG_MIME);
+    if (!fileId) return;
+    await handleMoveFile(fileId, targetFolderId);
+  }
+
   return (
     <div {...getRootProps()} className="relative flex h-full flex-col p-4 lg:p-8">
       <input {...getInputProps()} />
@@ -122,7 +174,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
       )}
 
       <div className="mb-4 flex flex-col gap-3">
-        <FileBreadcrumb path={path} />
+        <FileBreadcrumb path={path} onDropFile={handleMoveFile} />
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-48 flex-1">
@@ -192,7 +244,13 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
           {displayedFolders.map((folder) => (
             <div
               key={folder.id}
-              className="group relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors hover:border-primary/40 hover:bg-accent"
+              onDragOver={(e) => handleFolderDragOver(e, folder.id)}
+              onDragLeave={() => handleFolderDragLeave(folder.id)}
+              onDrop={(e) => handleFolderDrop(e, folder.id)}
+              className={cn(
+                "group relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors hover:border-primary/40 hover:bg-accent",
+                dragOverFolderId === folder.id && "border-primary bg-primary/10 ring-2 ring-primary"
+              )}
             >
               <div className="absolute right-1.5 top-1.5">
                 <FolderActionsMenu folder={folder} onChanged={() => invalidate(folderId)} />
@@ -208,7 +266,13 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
             return (
               <div
                 key={file.id}
-                className="group relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors hover:border-primary/40 hover:bg-accent"
+                draggable={!isSearching}
+                onDragStart={(e) => handleFileDragStart(e, file)}
+                onDragEnd={handleFileDragEnd}
+                className={cn(
+                  "group relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors hover:border-primary/40 hover:bg-accent",
+                  draggingFileId === file.id && "opacity-40"
+                )}
               >
                 <div className="absolute right-1.5 top-1.5">
                   <FileActionsMenu
@@ -248,7 +312,16 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
             </thead>
             <tbody className="divide-y">
               {displayedFolders.map((folder) => (
-                <tr key={folder.id} className="group hover:bg-accent">
+                <tr
+                  key={folder.id}
+                  onDragOver={(e) => handleFolderDragOver(e, folder.id)}
+                  onDragLeave={() => handleFolderDragLeave(folder.id)}
+                  onDrop={(e) => handleFolderDrop(e, folder.id)}
+                  className={cn(
+                    "group hover:bg-accent",
+                    dragOverFolderId === folder.id && "bg-primary/10 ring-2 ring-inset ring-primary"
+                  )}
+                >
                   <td
                     onClick={() => goToFolder(folder.id)}
                     className="flex cursor-pointer items-center gap-2 px-4 py-2.5 font-medium"
@@ -275,7 +348,13 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
               {displayedFiles.map((file) => {
                 const Icon = iconForMime(file.mimeType);
                 return (
-                  <tr key={file.id} className="group hover:bg-accent">
+                  <tr
+                    key={file.id}
+                    draggable={!isSearching}
+                    onDragStart={(e) => handleFileDragStart(e, file)}
+                    onDragEnd={handleFileDragEnd}
+                    className={cn("group hover:bg-accent", draggingFileId === file.id && "opacity-40")}
+                  >
                     <td className="px-4 py-2.5">
                       <button onClick={() => setPreviewFile(file)} className="flex items-center gap-2 font-medium">
                         <Icon className="size-4 text-muted-foreground" /> {file.name}

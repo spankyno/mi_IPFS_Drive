@@ -120,7 +120,9 @@ El código abstrae el proveedor en `src/lib/ipfs/pinning-provider.ts`. Cambiar d
 
 ### Gateways de previsualización
 
-Para mostrar imágenes/PDFs/video directamente en el navegador usamos `https://<gateway>/ipfs/<CID>`. Por defecto usamos el gateway público `ipfs.io`, pero cada proveedor de pinning ofrece su propio gateway dedicado (más rápido, sin rate-limit compartido) — configúralo en `NEXT_PUBLIC_IPFS_GATEWAY_URL`.
+Para mostrar imágenes/PDFs/video directamente en el navegador usamos `https://<gateway>/ipfs/<CID>`. **Con Filebase, usa siempre su propio gateway público — `https://ipfs.filebase.io/ipfs` — y NO el gateway genérico `ipfs.io`.** La diferencia importa de verdad: `ipfs.filebase.io` está peereado directamente con los nodos de Filebase, así que el contenido está disponible al instante nada más subirlo. El gateway genérico `ipfs.io` tiene que localizar el contenido a través de la red DHT de IPFS, lo que puede tardar minutos, horas, o fallar directamente para contenido recién pineado (verás `ERR_QUIC_PROTOCOL_ERROR` o "esta página no está disponible" aunque el archivo esté perfectamente subido). El gateway público de Filebase tiene un límite de 200 req/min — de sobra para un proyecto personal.
+
+Ya está configurado así por defecto en `.env.example`. Si cambias de proveedor de pinning, actualiza `NEXT_PUBLIC_IPFS_GATEWAY_URL` al gateway público de ese proveedor.
 
 ---
 
@@ -188,7 +190,7 @@ Implementado con `@supabase/ssr` (cliente browser + server + middleware), Server
 3. Al terminar, el cliente llama al Server Action `finalizeUploadAction`, que hace un `HeadObject` contra Filebase para leer el CID recién asignado (header `x-amz-meta-cid`), inserta la fila en `files` y registra la actividad — todo esto server-side, sin depender de que el navegador pueda leer ese header (Filebase no expone `x-amz-meta-*` a JS de navegador por CORS salvo que lo configures explícitamente).
 4. TanStack Query invalida `folder-contents`, `storage-usage` y `recent-files` para reflejar el cambio al instante.
 
-**Carpetas**: jerarquía real vía `parent_id` en Postgres, navegable con breadcrumb (`?folder=<id>` en la URL). **Borrado**: `deleteFileAction` borra primero el objeto en Filebase (`DeleteObjectCommand`, lo despinea de IPFS) y luego la fila en Postgres.
+**Carpetas**: jerarquía real vía `parent_id` en Postgres, navegable con breadcrumb (`?folder=<id>` en la URL). **Mover archivos**: arrastra un archivo (grid o lista) sobre una carpeta visible, o sobre cualquier nivel del breadcrumb (incluida "Mi drive" para subirlo a la raíz) — usa drag & drop nativo del navegador (`draggable` + eventos `dragstart`/`dragover`/`drop`), sin librerías adicionales; no confundir con el dropzone de arriba, que es para subir archivos nuevos desde el sistema operativo. **Borrado**: `deleteFileAction` borra primero el objeto en Filebase (`DeleteObjectCommand`, lo despinea de IPFS) y luego la fila en Postgres.
 
 **Nota:** el filtro de este paso es solo por nombre dentro de la carpeta actual. Búsqueda avanzada (por tags, en todo el drive) y la previsualización enriquecida (modal con imagen/video/PDF embebido) llegan en el Paso 5.
 
