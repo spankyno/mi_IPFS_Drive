@@ -117,13 +117,13 @@ export function ShareDialog({
                 aria-checked={isPublic}
                 onClick={handleTogglePublic}
                 disabled={isTogglingPublic}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                className={`relative h-6 w-11 shrink-0 overflow-hidden rounded-full transition-colors ${
                   isPublic ? "bg-primary" : "bg-muted"
                 }`}
               >
                 <span
-                  className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform ${
-                    isPublic ? "translate-x-5" : "translate-x-0.5"
+                  className={`absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform ${
+                    isPublic ? "translate-x-5" : "translate-x-0"
                   }`}
                 />
               </button>
