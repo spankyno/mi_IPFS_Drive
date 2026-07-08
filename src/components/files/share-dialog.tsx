@@ -97,17 +97,17 @@ export function ShareDialog({
     <Dialog open={!!file} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Compartir &quot;{file.name}&quot;</DialogTitle>
+          <DialogTitle className="truncate pr-6">Compartir &quot;{file.name}&quot;</DialogTitle>
           <DialogDescription>Elige cómo quieres que otros accedan a este archivo.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
           {/* Enlace público por CID */}
           <div className="rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Globe className="size-4 text-muted-foreground" />
-                <div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <Globe className="size-4 shrink-0 text-muted-foreground" />
+                <div className="min-w-0">
                   <p className="text-sm font-medium">Enlace público</p>
                   <p className="text-xs text-muted-foreground">Cualquiera con el enlace puede verlo, sin iniciar sesión.</p>
                 </div>
@@ -129,13 +129,13 @@ export function ShareDialog({
               </button>
             </div>
             {isPublic && (
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-3 flex min-w-0 items-center gap-2">
                 <input
                   readOnly
                   value={publicUrl}
-                  className="flex-1 truncate rounded-md border bg-muted/40 px-2 py-1.5 text-xs"
+                  className="w-full min-w-0 truncate rounded-md border bg-muted/40 px-2 py-1.5 text-xs"
                 />
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(publicUrl, "Enlace")}>
+                <Button size="sm" variant="outline" className="shrink-0" onClick={() => copyToClipboard(publicUrl, "Enlace")}>
                   <Copy className="size-3.5" />
                 </Button>
               </div>

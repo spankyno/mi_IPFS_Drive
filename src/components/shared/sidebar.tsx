@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils/cn";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, enabled: true },
   { href: "/dashboard/files", label: "Mis archivos", icon: Files, enabled: true },
-  { href: "/dashboard/shared", label: "Compartidos", icon: Share2, enabled: false },
+  { href: "/dashboard/shared", label: "Compartidos", icon: Share2, enabled: true },
   { href: "/dashboard/settings", label: "Configuración", icon: Settings, enabled: false },
 ];
 

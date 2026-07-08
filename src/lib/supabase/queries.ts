@@ -224,3 +224,42 @@ export async function getSharesForFile(supabase: TypedClient, fileId: string): P
     createdAt: row.created_at,
   }));
 }
+
+/** Archivos que el usuario ha marcado como públicos (visibility = 'public'), para /dashboard/shared. */
+export async function getPubliclySharedFiles(supabase: TypedClient, userId: string): Promise<DriveFile[]> {
+  const { data, error } = await supabase
+    .from("files")
+    .select("*")
+    .eq("owner_id", userId)
+    .eq("visibility", "public")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map(mapFileRow);
+}
+
+/** Todos los enlaces privados del usuario, con el nombre del archivo al que pertenecen, para /dashboard/shared. */
+export async function getAllSharesForUser(
+  supabase: TypedClient,
+  userId: string
+): Promise<(FileShare & { fileName: string; fileCid: string })[]> {
+  const { data, error } = await supabase
+    .from("shares")
+    .select("*, files(name, cid)")
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    fileId: row.file_id,
+    ownerId: row.owner_id,
+    shareToken: row.share_token,
+    permission: row.permission,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    fileName: (row.files as unknown as { name: string; cid: string } | null)?.name ?? "Archivo eliminado",
+    fileCid: (row.files as unknown as { name: string; cid: string } | null)?.cid ?? "",
+  }));
+}
