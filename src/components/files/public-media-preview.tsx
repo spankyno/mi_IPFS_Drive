@@ -13,7 +13,7 @@ function iconForMime(mimeType: string) {
 interface PublicMediaPreviewProps {
   name: string;
   mimeType: string;
-  gatewayUrl: string;
+  cid: string;
   isEncrypted: boolean;
   encryptionKey: string | null;
   encryptionIv: string | null;
@@ -24,7 +24,7 @@ interface PublicMediaPreviewProps {
 export function PublicMediaPreview({
   name,
   mimeType,
-  gatewayUrl,
+  cid,
   isEncrypted,
   encryptionKey,
   encryptionIv,
@@ -32,7 +32,7 @@ export function PublicMediaPreview({
 }: PublicMediaPreviewProps) {
   const { url: mediaUrl, isLoading, error } = useDecryptedMediaUrl(
     { isEncrypted, encryptionKey, encryptionIv, mimeType },
-    gatewayUrl
+    cid
   );
   const Icon = iconForMime(mimeType);
 

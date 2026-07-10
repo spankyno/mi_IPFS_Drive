@@ -67,8 +67,7 @@ export function FilePreviewDialog({ file, onClose, onChanged, onDeleted, onShare
     }
   }, [file]);
 
-  const gatewayUrlForHook = file ? `${GATEWAY}/${file.cid}` : null;
-  const { url: mediaUrl, isLoading: isDecrypting, error: decryptError } = useDecryptedMediaUrl(file, gatewayUrlForHook);
+  const { url: mediaUrl, isLoading: isDecrypting, error: decryptError } = useDecryptedMediaUrl(file, file?.cid ?? null);
 
   if (!file) return null;
 

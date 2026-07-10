@@ -233,8 +233,10 @@ Con `NEXT_PUBLIC_ENABLE_CLIENT_ENCRYPTION=true`, aparece un botón **"Cifrar"** 
 **Cómo funciona:**
 1. Al subir, si "Cifrar" está activo: se genera una clave AES-256 aleatoria y un IV de 96 bits en el navegador, se cifra el archivo completo con `crypto.subtle.encrypt`, y se sube el resultado (no el archivo original).
 2. La clave (en base64) y el IV se guardan en la fila de `files` en Supabase, junto al resto de metadatos.
-3. Al previsualizar o descargar: el navegador descarga el ciphertext del gateway IPFS, lo descifra localmente con `crypto.subtle.decrypt`, y genera una `blob:` URL temporal para mostrarlo — el contenido descifrado nunca se sube a ningún sitio, solo vive en memoria del navegador mientras lo estás viendo.
+3. Al previsualizar o descargar: el navegador pide el ciphertext a `/api/ipfs-proxy?cid=<cid>` (una ruta propia, no al gateway IPFS directamente — ver nota de CORS abajo), lo descifra localmente con `crypto.subtle.decrypt`, y genera una `blob:` URL temporal para mostrarlo. El contenido descifrado nunca se sube a ningún sitio, solo vive en memoria del navegador mientras lo estás viendo.
 4. Esto también funciona en los enlaces de compartición (`/share/cid/<cid>` y `/share/token/<token>`): la clave viaja junto con el resto de datos del archivo compartido, y el descifrado ocurre en el navegador de quien lo recibe.
+
+**Por qué existe `/api/ipfs-proxy`:** descifrar requiere hacer `fetch()` del contenido para pasarlo a Web Crypto — y los gateways públicos de IPFS (incluido el de Filebase) no envían cabeceras `Access-Control-Allow-Origin`, así que un `fetch()` directo desde el navegador a esa URL falla con un error de CORS ("Failed to fetch"), aunque esa misma URL funcione perfectamente en una etiqueta `<img>` (los archivos *sin* cifrar siguen usando el gateway directo vía `<img>`/`<video>`, sin pasar por el proxy, porque esas etiquetas no están sujetas a CORS). El proxy resuelve esto: nuestro servidor pide el archivo al gateway (sin restricción CORS entre servidores) y lo re-sirve desde nuestro propio dominio, con lo que el `fetch()` del navegador pasa a ser same-origin.
 
 **⚠️ Léelo antes de confiar en esto para algo sensible — qué protege y qué NO protege:**
 

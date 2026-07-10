@@ -8,6 +8,7 @@ export function PublicFileView({
   mimeType,
   sizeBytes,
   createdAt,
+  cid,
   gatewayUrl,
   allowDownload,
   isEncrypted,
@@ -18,6 +19,7 @@ export function PublicFileView({
   mimeType: string;
   sizeBytes: number;
   createdAt: string;
+  cid: string;
   gatewayUrl: string;
   allowDownload: boolean;
   isEncrypted: boolean;
@@ -38,7 +40,7 @@ export function PublicFileView({
           <PublicMediaPreview
             name={name}
             mimeType={mimeType}
-            gatewayUrl={gatewayUrl}
+            cid={cid}
             isEncrypted={isEncrypted}
             encryptionKey={encryptionKey}
             encryptionIv={encryptionIv}

@@ -27,6 +27,7 @@ export default async function PublicCidPage({ params }: { params: Promise<{ cid:
       mimeType={file.mime_type}
       sizeBytes={file.size_bytes}
       createdAt={file.created_at}
+      cid={file.cid}
       gatewayUrl={`${GATEWAY}/${file.cid}`}
       allowDownload
       isEncrypted={file.is_encrypted}

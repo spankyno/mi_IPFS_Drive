@@ -11,24 +11,31 @@ interface DecryptableFile {
 }
 
 /**
- * Si el archivo está cifrado, descarga el ciphertext desde el gateway y lo
- * descifra en el navegador con la clave guardada en Supabase, devolviendo
- * una blob: URL local (nunca se sube el archivo descifrado a ningún sitio).
- * Si no está cifrado, simplemente devuelve la URL del gateway tal cual.
+ * Si el archivo está cifrado, descarga el ciphertext (vía nuestro proxy
+ * `/api/ipfs-proxy`, NO directo al gateway — ver comentario en esa ruta
+ * sobre por qué: los gateways públicos de IPFS no envían cabeceras CORS,
+ * así que un `fetch()` directo desde el navegador falla) y lo descifra
+ * localmente con la clave guardada en Supabase, devolviendo una `blob:`
+ * URL local (el contenido descifrado nunca se sube a ningún sitio).
+ * Si el archivo no está cifrado, devuelve directamente la URL del gateway
+ * (las etiquetas <img>/<video>/<iframe> no están sujetas a CORS, así que
+ * no hace falta pasar por el proxy en ese caso).
  */
-export function useDecryptedMediaUrl(file: DecryptableFile | null, gatewayUrl: string | null) {
+export function useDecryptedMediaUrl(file: DecryptableFile | null, cid: string | null) {
   const [url, setUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const gateway = process.env.NEXT_PUBLIC_IPFS_GATEWAY_URL ?? "https://ipfs.filebase.io/ipfs";
+
   useEffect(() => {
-    if (!file || !gatewayUrl) {
+    if (!file || !cid) {
       setUrl(null);
       return;
     }
 
     if (!file.isEncrypted) {
-      setUrl(gatewayUrl);
+      setUrl(`${gateway}/${cid}`);
       return;
     }
 
@@ -44,8 +51,11 @@ export function useDecryptedMediaUrl(file: DecryptableFile | null, gatewayUrl: s
       setIsLoading(true);
       setError(null);
       try {
-        const response = await fetch(gatewayUrl!);
-        if (!response.ok) throw new Error(`El gateway respondió ${response.status}`);
+        const response = await fetch(`/api/ipfs-proxy?cid=${encodeURIComponent(cid!)}`);
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(body?.error ?? `No se pudo descargar el archivo (${response.status}).`);
+        }
         const ciphertext = await response.arrayBuffer();
         const blob = await decryptToBlob(ciphertext, file!.encryptionKey!, file!.encryptionIv!, file!.mimeType);
 
@@ -68,7 +78,7 @@ export function useDecryptedMediaUrl(file: DecryptableFile | null, gatewayUrl: s
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file?.isEncrypted, file?.encryptionKey, file?.encryptionIv, file?.mimeType, gatewayUrl]);
+  }, [file?.isEncrypted, file?.encryptionKey, file?.encryptionIv, file?.mimeType, cid, gateway]);
 
   return { url, isLoading, error };
 }
