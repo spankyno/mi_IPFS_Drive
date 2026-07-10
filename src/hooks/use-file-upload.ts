@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { finalizeUploadAction } from "@/lib/actions/files";
+import { encryptFile, exportKeyToBase64 } from "@/lib/crypto/client-encryption";
 import { folderContentsKey } from "@/hooks/use-folder-contents";
 import type { UploadTask } from "@/types/domain";
 import { toast } from "sonner";
@@ -14,11 +15,11 @@ interface RequestUploadUrlResponse {
 }
 
 /** PUT con XMLHttpRequest en vez de fetch: es la única forma de tener eventos de progreso reales en el navegador. */
-function uploadWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+function uploadWithProgress(url: string, body: Blob, contentType: string, onProgress: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.setRequestHeader("Content-Type", contentType);
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) {
@@ -32,7 +33,7 @@ function uploadWithProgress(url: string, file: File, onProgress: (pct: number) =
     };
 
     xhr.onerror = () => reject(new Error("Error de red durante la subida."));
-    xhr.send(file);
+    xhr.send(body);
   });
 }
 
@@ -45,17 +46,40 @@ export function useFileUpload(userId: string, folderId: string | null) {
   }, []);
 
   const uploadOne = useCallback(
-    async (file: File) => {
+    async (file: File, encrypt: boolean) => {
       const taskId = crypto.randomUUID();
       setTasks((prev) => [...prev, { id: taskId, file, progress: 0, status: "queued" }]);
 
       try {
+        const originalMimeType = file.type || "application/octet-stream";
+
+        // --- Cifrado cliente-side (opcional) ---
+        // Si está activado, ciframos ANTES de pedir la URL de subida: lo
+        // que sube al pinning service es ciphertext, nunca el archivo original.
+        let bodyToUpload: Blob = file;
+        let uploadContentType = originalMimeType;
+        let encryptionIv: string | null = null;
+        let encryptionKeyBase64: string | null = null;
+
+        if (encrypt) {
+          updateTask(taskId, { status: "encrypting" });
+          const { ciphertext, key, ivBase64 } = await encryptFile(file);
+          bodyToUpload = ciphertext;
+          uploadContentType = "application/octet-stream"; // el ciphertext no tiene un mimeType "real"
+          encryptionIv = ivBase64;
+          encryptionKeyBase64 = await exportKeyToBase64(key);
+        }
+
         updateTask(taskId, { status: "uploading" });
 
         const tokenRes = await fetch("/api/upload-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileName: file.name, contentType: file.type || "application/octet-stream", sizeBytes: file.size }),
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: uploadContentType,
+            sizeBytes: bodyToUpload.size,
+          }),
         });
         const tokenData: RequestUploadUrlResponse = await tokenRes.json();
 
@@ -63,17 +87,22 @@ export function useFileUpload(userId: string, folderId: string | null) {
           throw new Error(tokenData.error ?? "No se pudo iniciar la subida.");
         }
 
-        await uploadWithProgress(tokenData.uploadUrl, file, (pct) => updateTask(taskId, { progress: pct }));
+        await uploadWithProgress(tokenData.uploadUrl, bodyToUpload, uploadContentType, (pct) =>
+          updateTask(taskId, { progress: pct })
+        );
 
         updateTask(taskId, { status: "pinning", progress: 100 });
 
         const result = await finalizeUploadAction({
           key: tokenData.key,
           name: file.name,
-          mimeType: file.type || "application/octet-stream",
-          sizeBytes: file.size,
+          mimeType: originalMimeType, // el mimeType REAL, para poder previsualizar tras descifrar
+          sizeBytes: file.size, // tamaño del archivo original, no del ciphertext (mejor UX en la barra de uso)
           folderId,
           tags: [],
+          isEncrypted: encrypt,
+          encryptionIv,
+          encryptionKey: encryptionKeyBase64,
         });
 
         if (result.error) throw new Error(result.error);
@@ -94,8 +123,8 @@ export function useFileUpload(userId: string, folderId: string | null) {
   );
 
   const uploadFiles = useCallback(
-    (files: FileList | File[]) => {
-      Array.from(files).forEach((file) => void uploadOne(file));
+    (files: FileList | File[], options?: { encrypt?: boolean }) => {
+      Array.from(files).forEach((file) => void uploadOne(file, options?.encrypt ?? false));
     },
     [uploadOne]
   );

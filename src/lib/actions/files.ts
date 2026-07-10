@@ -67,6 +67,9 @@ export async function finalizeUploadAction(input: unknown) {
       storage_key: parsed.data.key,
       pinning_provider: provider,
       tags: parsed.data.tags,
+      is_encrypted: parsed.data.isEncrypted,
+      encryption_iv: parsed.data.encryptionIv,
+      encryption_key: parsed.data.encryptionKey,
     })
     .select("id")
     .single();

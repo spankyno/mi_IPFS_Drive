@@ -30,6 +30,7 @@ function mapFileRow(row: Database["public"]["Tables"]["files"]["Row"]): DriveFil
     pinningProvider: row.pinning_provider as DriveFile["pinningProvider"],
     isEncrypted: row.is_encrypted,
     encryptionIv: row.encryption_iv,
+    encryptionKey: row.encryption_key,
     tags: row.tags,
     visibility: row.visibility,
     thumbnailCid: row.thumbnail_cid,

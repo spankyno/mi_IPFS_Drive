@@ -34,6 +34,7 @@ import {
   Search,
   UploadCloud,
   X,
+  Lock,
 } from "lucide-react";
 import type { DriveFile, DriveFolder } from "@/types/domain";
 
@@ -61,6 +62,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [previewFile, setPreviewFile] = useState<DriveFile | null>(null);
   const [shareFile, setShareFile] = useState<DriveFile | null>(null);
+  const [encryptUploads, setEncryptUploads] = useState(false);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
 
@@ -81,7 +83,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
     noClick: true,
     noKeyboard: true,
     onDrop: (accepted) => {
-      if (accepted.length > 0) uploadFiles(accepted);
+      if (accepted.length > 0) uploadFiles(accepted, { encrypt: encryptUploads });
     },
   });
 
@@ -205,6 +207,24 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
 
           <CreateFolderDialog parentId={folderId} />
 
+          {process.env.NEXT_PUBLIC_ENABLE_CLIENT_ENCRYPTION === "true" && (
+            <button
+              type="button"
+              onClick={() => setEncryptUploads((v) => !v)}
+              aria-pressed={encryptUploads}
+              title="Cifra los archivos en tu navegador antes de subirlos — ni Filebase ni la red IPFS ven el contenido original."
+              className={cn(
+                "flex h-10 items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition-colors",
+                encryptUploads
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent"
+              )}
+            >
+              <Lock className="size-4" />
+              Cifrar
+            </button>
+          )}
+
           <Button onClick={open}>
             <Upload className="size-4" />
             Subir archivos
@@ -291,7 +311,12 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
                   />
                 </div>
                 <button onClick={() => setPreviewFile(file)} className="flex flex-col items-center gap-2">
-                  <Icon className="size-9 text-muted-foreground group-hover:text-primary" />
+                  <div className="relative">
+                    <Icon className="size-9 text-muted-foreground group-hover:text-primary" />
+                    {file.isEncrypted && (
+                      <Lock className="absolute -right-1 -top-1 size-3.5 rounded-full bg-background p-0.5 text-primary" />
+                    )}
+                  </div>
                   <p className="w-full max-w-32 truncate text-sm font-medium">{file.name}</p>
                   <p className="text-xs text-muted-foreground">{formatBytes(file.sizeBytes)}</p>
                   {file.tags.length > 0 && (
@@ -367,6 +392,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
                     <td className="px-4 py-2.5">
                       <button onClick={() => setPreviewFile(file)} className="flex items-center gap-2 font-medium">
                         <Icon className="size-4 text-muted-foreground" /> {file.name}
+                        {file.isEncrypted && <Lock className="size-3 text-primary" />}
                         {file.tags.length > 0 && (
                           <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
                             {file.tags[0]}

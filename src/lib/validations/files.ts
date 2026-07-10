@@ -12,6 +12,9 @@ export const finalizeUploadSchema = z.object({
   sizeBytes: z.number().positive(),
   folderId: z.string().uuid().nullable(),
   tags: z.array(z.string().min(1).max(40)).max(20).default([]),
+  isEncrypted: z.boolean().default(false),
+  encryptionIv: z.string().nullable().default(null),
+  encryptionKey: z.string().nullable().default(null),
 });
 
 export const renameFileSchema = z.object({

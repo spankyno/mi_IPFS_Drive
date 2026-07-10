@@ -12,7 +12,7 @@ export default async function PublicCidPage({ params }: { params: Promise<{ cid:
   const supabase = await createClient();
   const { data: file } = await supabase
     .from("files")
-    .select("name, mime_type, size_bytes, cid, visibility, created_at")
+    .select("name, mime_type, size_bytes, cid, visibility, created_at, is_encrypted, encryption_key, encryption_iv")
     .eq("cid", cid)
     .eq("visibility", "public")
     .maybeSingle();
@@ -29,6 +29,9 @@ export default async function PublicCidPage({ params }: { params: Promise<{ cid:
       createdAt={file.created_at}
       gatewayUrl={`${GATEWAY}/${file.cid}`}
       allowDownload
+      isEncrypted={file.is_encrypted}
+      encryptionKey={file.encryption_key}
+      encryptionIv={file.encryption_iv}
     />
   );
 }

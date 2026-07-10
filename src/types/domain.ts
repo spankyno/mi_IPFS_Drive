@@ -34,6 +34,7 @@ export interface DriveFile {
   pinningProvider: PinningProvider;
   isEncrypted: boolean;
   encryptionIv: string | null;
+  encryptionKey: string | null;
   tags: string[];
   visibility: FileVisibility;
   thumbnailCid: string | null;

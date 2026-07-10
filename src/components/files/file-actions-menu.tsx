@@ -68,22 +68,26 @@ export function FileActionsMenu({
           >
             <Share2 className="size-4" /> Compartir
           </DropdownMenu.Item>
-          <DropdownMenu.Item asChild>
-            <a
-              href={gatewayUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent"
-            >
-              <ExternalLink className="size-4" /> Abrir en IPFS
-            </a>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={handleCopyLink}
-            className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent"
-          >
-            <Copy className="size-4" /> Copiar enlace
-          </DropdownMenu.Item>
+          {!file.isEncrypted && (
+            <>
+              <DropdownMenu.Item asChild>
+                <a
+                  href={gatewayUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent"
+                >
+                  <ExternalLink className="size-4" /> Abrir en IPFS
+                </a>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                onSelect={handleCopyLink}
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent"
+              >
+                <Copy className="size-4" /> Copiar enlace
+              </DropdownMenu.Item>
+            </>
+          )}
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           <DropdownMenu.Item
             onSelect={handleDelete}

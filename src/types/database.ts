@@ -61,6 +61,7 @@ export interface Database {
           pinning_provider: string;
           is_encrypted: boolean;
           encryption_iv: string | null;
+          encryption_key: string | null;
           tags: string[];
           visibility: "private" | "public" | "unlisted";
           thumbnail_cid: string | null;

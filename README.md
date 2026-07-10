@@ -50,7 +50,7 @@ pnpm install   # o npm install / yarn
 
 ### 2. Supabase (Auth + DB + Realtime)
 1. Crea un proyecto gratis en [supabase.com](https://supabase.com) (free tier: 500 MB DB, 50k usuarios activos/mes, Realtime incluido).
-2. En el SQL Editor del dashboard, ejecuta en orden: `supabase/migrations/0001_init.sql`, `0002_add_storage_key.sql` y **`0003_share_function.sql`** (esta última corrige un fallo de seguridad real de la 0001 — ver nota más abajo — así que no la saltes aunque no vayas a usar la función de compartir).
+2. En el SQL Editor del dashboard, ejecuta en orden: `supabase/migrations/0001_init.sql`, `0002_add_storage_key.sql`, **`0003_share_function.sql`** (corrige un fallo de seguridad real de la 0001 — ver nota más abajo — así que no la saltes aunque no vayas a usar la función de compartir) y `0004_encryption_key.sql`.
 3. En **Authentication → Providers**, activa "Email" y asegúrate de que "Confirm email" y "Magic Link" estén habilitados.
 4. En **Authentication → URL Configuration**, añade `http://localhost:3000/auth/callback` (y tu dominio de producción) como Redirect URL. Esta misma URL de callback maneja magic links, confirmación de email **y** reset de contraseña.
 5. Copia `Project URL` y `anon public key` a tu `.env.local`.
@@ -226,6 +226,24 @@ Dos formas de compartir, con comportamiento distinto a propósito:
 - **Búsqueda debounced**: el buscador de `/dashboard/files` espera 350ms de inactividad antes de lanzar la query contra todo el drive, para no disparar una petición por cada pulsación de tecla.
 - **Cabeceras de seguridad HTTP** (`next.config.ts`): `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` y una `Content-Security-Policy` — deliberadamente permisiva en `img-src`/`connect-src`/`frame-src` porque no sabemos de antemano qué gateway IPFS o endpoint de pinning se usará (depende de `IPFS_PINNING_PROVIDER`), pero bloqueando sin excepción `<object>`/`<embed>` y que cualquier sitio externo nos incruste en un iframe.
 
+## 🔐 Cifrado cliente-side real (Paso 8)
+
+Con `NEXT_PUBLIC_ENABLE_CLIENT_ENCRYPTION=true`, aparece un botón **"Cifrar"** en la toolbar de `/dashboard/files`. Si lo activas antes de subir, cada archivo se cifra con **AES-256-GCM (Web Crypto API)** en tu navegador, y lo que sube a Filebase/IPFS es ciphertext puro.
+
+**Cómo funciona:**
+1. Al subir, si "Cifrar" está activo: se genera una clave AES-256 aleatoria y un IV de 96 bits en el navegador, se cifra el archivo completo con `crypto.subtle.encrypt`, y se sube el resultado (no el archivo original).
+2. La clave (en base64) y el IV se guardan en la fila de `files` en Supabase, junto al resto de metadatos.
+3. Al previsualizar o descargar: el navegador descarga el ciphertext del gateway IPFS, lo descifra localmente con `crypto.subtle.decrypt`, y genera una `blob:` URL temporal para mostrarlo — el contenido descifrado nunca se sube a ningún sitio, solo vive en memoria del navegador mientras lo estás viendo.
+4. Esto también funciona en los enlaces de compartición (`/share/cid/<cid>` y `/share/token/<token>`): la clave viaja junto con el resto de datos del archivo compartido, y el descifrado ocurre en el navegador de quien lo recibe.
+
+**⚠️ Léelo antes de confiar en esto para algo sensible — qué protege y qué NO protege:**
+
+- ✅ **Protege frente a IPFS y al pinning service**: Filebase, cualquier nodo IPFS de la red, y cualquiera que solo tenga el CID (sin pasar por nuestra app) ven únicamente ciphertext. Esta es la superficie que de verdad no controlas al usar almacenamiento descentralizado, y es la que este cifrado neutraliza.
+- ❌ **NO es "zero-knowledge" frente a tu propia base de datos**: la clave de cada archivo se guarda en la misma fila de Postgres que el resto de sus metadatos, protegida por las políticas RLS habituales (el owner, o quien tenga un enlace de compartición válido, puede leerla). Alguien con la Service Role Key de tu proyecto de Supabase (privilegios de administrador) podría leer las claves directamente. Un diseño zero-knowledge real requeriría derivar la clave de algo que el servidor nunca ve (p. ej. una contraseña que solo conoce el usuario) — no está implementado así aquí, a propósito de mantener la complejidad razonable para un proyecto de este alcance.
+- **Compartir sigue funcionando por diseño**: si activas un enlace público o privado sobre un archivo cifrado, la clave viaja con la compartición — es lo esperado (quien recibe el enlace debe poder ver el archivo), pero significa que la confidencialidad depende de que el enlace no se filtre, igual que con cualquier archivo sin cifrar.
+
+En resumen: este cifrado es una capa de defensa real contra la naturaleza pública de IPFS, no una bóveda impenetrable frente a todo. Para casos de verdadera sensibilidad (datos médicos, legales, etc.) valora añadir cifrado derivado de contraseña de usuario antes de usar esto en producción.
+
 ## 🗺️ Roadmap de implementación (este build es iterativo)
 
 - [x] 1. Estructura base + configuración + README
@@ -234,8 +252,9 @@ Dos formas de compartir, con comportamiento distinto a propósito:
 - [x] 4. Upload flow: drag & drop, carpetas, progreso
 - [x] 5. Previews, búsqueda avanzada, tags
 - [x] 6. Compartir (público/privado) + actividad realtime
-- [x] 7. Optimización, seguridad, pulido UX final (**este paso**)
+- [x] 7. Optimización, seguridad, pulido UX final
+- [x] 8. Cifrado cliente-side real con AES-256-GCM (**este paso**)
 
-**La aplicación está completa según el plan original.** Ideas razonables para seguir iterando más allá de este roadmap: encriptación cliente-side real en el flujo de subida (la variable `NEXT_PUBLIC_ENABLE_CLIENT_ENCRYPTION` ya existe pero el cifrado en sí no está implementado), rate limiting real en `/api/upload-token` (necesitaría un store externo tipo Upstash Redis, ya que las funciones serverless no persisten estado entre invocaciones), miniaturas generadas para vídeos/PDFs, y papelera de reciclaje con recuperación en vez de borrado inmediato.
+**La aplicación cubre el roadmap original más esta extensión.** Otras ideas razonables para seguir iterando: derivar la clave de cifrado de una contraseña del usuario (verdadero zero-knowledge, en vez de guardar la clave en la DB), rate limiting real en `/api/upload-token` (necesitaría un store externo tipo Upstash Redis), miniaturas generadas para vídeos/PDFs, y papelera de reciclaje con recuperación en vez de borrado inmediato.
 
 Vamos a construirlo por bloques, confirmando contigo antes de avanzar al siguiente. 👇

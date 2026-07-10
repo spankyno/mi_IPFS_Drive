@@ -23,6 +23,9 @@ export default async function PublicTokenPage({ params }: { params: Promise<{ to
       createdAt={file.created_at}
       gatewayUrl={`${GATEWAY}/${file.cid}`}
       allowDownload={file.share_permission === "download"}
+      isEncrypted={file.is_encrypted}
+      encryptionKey={file.encryption_key}
+      encryptionIv={file.encryption_iv}
     />
   );
 }

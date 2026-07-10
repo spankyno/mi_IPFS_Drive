@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { TagInput } from "@/components/files/tag-input";
 import { renameFileAction, updateTagsAction, deleteFileAction } from "@/lib/actions/files";
+import { useDecryptedMediaUrl } from "@/hooks/use-decrypted-media";
 import { formatBytes, formatRelativeTime, truncateCid } from "@/lib/utils/format";
 import { toast } from "sonner";
 import {
@@ -26,6 +27,9 @@ import {
   X,
   Loader2,
   Share2,
+  Lock,
+  Download,
+  AlertCircle,
 } from "lucide-react";
 import type { DriveFile } from "@/types/domain";
 
@@ -62,6 +66,9 @@ export function FilePreviewDialog({ file, onClose, onChanged, onDeleted, onShare
       setIsEditingName(false);
     }
   }, [file]);
+
+  const gatewayUrlForHook = file ? `${GATEWAY}/${file.cid}` : null;
+  const { url: mediaUrl, isLoading: isDecrypting, error: decryptError } = useDecryptedMediaUrl(file, gatewayUrlForHook);
 
   if (!file) return null;
 
@@ -163,25 +170,27 @@ export function FilePreviewDialog({ file, onClose, onChanged, onDeleted, onShare
         <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
           {/* Zona de previsualización */}
           <div className="flex min-h-64 items-center justify-center overflow-hidden rounded-lg border bg-muted/40">
-            {file.mimeType.startsWith("image/") ? (
-              // eslint-disable-next-line @next/next/no-img-element -- imagen servida desde un gateway IPFS externo dinámico
-              <img src={gatewayUrl} alt={file.name} className="max-h-96 w-full object-contain" />
+            {isDecrypting ? (
+              <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                <Loader2 className="size-8 animate-spin" />
+                <p className="text-sm">Descifrando en tu navegador…</p>
+              </div>
+            ) : decryptError ? (
+              <div className="flex flex-col items-center gap-2 p-8 text-center text-destructive">
+                <AlertCircle className="size-10" />
+                <p className="text-sm">{decryptError}</p>
+              </div>
+            ) : !mediaUrl ? null : file.mimeType.startsWith("image/") ? (
+              // eslint-disable-next-line @next/next/no-img-element -- imagen servida desde un gateway IPFS externo dinámico (o descifrada a blob: URL)
+              <img src={mediaUrl} alt={file.name} className="max-h-96 w-full object-contain" />
             ) : file.mimeType.startsWith("video/") ? (
-              <video src={gatewayUrl} controls className="max-h-96 w-full" />
+              <video src={mediaUrl} controls className="max-h-96 w-full" />
             ) : file.mimeType === "application/pdf" ? (
-              <iframe src={gatewayUrl} title={file.name} className="h-96 w-full" />
+              <iframe src={mediaUrl} title={file.name} className="h-96 w-full" />
             ) : (
               <div className="flex flex-col items-center gap-2 p-8 text-center text-muted-foreground">
                 <Icon className="size-12" />
                 <p className="text-sm">No hay vista previa disponible para este tipo de archivo.</p>
-                <a
-                  href={gatewayUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline"
-                >
-                  Abrir en IPFS
-                </a>
               </div>
             )}
           </div>
@@ -212,20 +221,42 @@ export function FilePreviewDialog({ file, onClose, onChanged, onDeleted, onShare
                 <dt className="text-muted-foreground">Proveedor</dt>
                 <dd className="capitalize">{file.pinningProvider}</dd>
               </div>
+              {file.isEncrypted && (
+                <div className="flex items-center gap-1.5 rounded-md bg-primary/5 p-2 text-xs text-primary">
+                  <Lock className="size-3.5 shrink-0" />
+                  Cifrado en tu navegador antes de subirse. El contenido en IPFS es ilegible sin la clave.
+                </div>
+              )}
             </dl>
 
             <div className="flex flex-col gap-2 pt-2">
               <Button variant="outline" onClick={() => onShare(file)}>
                 <Share2 className="size-4" /> Compartir
               </Button>
-              <Button variant="outline" asChild>
-                <a href={gatewayUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="size-4" /> Abrir en IPFS
-                </a>
-              </Button>
-              <Button variant="outline" onClick={handleCopyLink}>
-                <Copy className="size-4" /> Copiar enlace
-              </Button>
+              {file.isEncrypted ? (
+                mediaUrl ? (
+                  <Button variant="outline" asChild>
+                    <a href={mediaUrl} download={file.name}>
+                      <Download className="size-4" /> Descargar (descifrado)
+                    </a>
+                  </Button>
+                ) : (
+                  <Button variant="outline" disabled isLoading={isDecrypting}>
+                    <Download className="size-4" /> Descargar (descifrado)
+                  </Button>
+                )
+              ) : (
+                <>
+                  <Button variant="outline" asChild>
+                    <a href={gatewayUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="size-4" /> Abrir en IPFS
+                    </a>
+                  </Button>
+                  <Button variant="outline" onClick={handleCopyLink}>
+                    <Copy className="size-4" /> Copiar enlace
+                  </Button>
+                </>
+              )}
               <Button variant="destructive" onClick={handleDelete} isLoading={isDeleting}>
                 <Trash2 className="size-4" /> Eliminar
               </Button>
