@@ -1,5 +1,5 @@
 import type { Database } from "@/types/database";
-import type { DriveFile, ActivityLogEntry, StorageUsage, DriveFolder, FileShare } from "@/types/domain";
+import type { DriveFile, ActivityLogEntry, DriveFolder, FileShare, UserLimits } from "@/types/domain";
 import type { createClient as createBrowserSupabase } from "@/lib/supabase/client";
 import type { createClient as createServerSupabase } from "@/lib/supabase/server";
 
@@ -14,8 +14,6 @@ import type { createClient as createServerSupabase } from "@/lib/supabase/server
 type TypedClient =
   | ReturnType<typeof createBrowserSupabase>
   | Awaited<ReturnType<typeof createServerSupabase>>;
-
-const DEFAULT_QUOTA_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB — coincide con el default de la tabla profiles
 
 function mapFileRow(row: Database["public"]["Tables"]["files"]["Row"]): DriveFile {
   return {
@@ -48,20 +46,6 @@ function mapActivityRow(row: Database["public"]["Tables"]["activity_log"]["Row"]
     folderId: row.folder_id,
     metadata: (row.metadata as Record<string, unknown>) ?? {},
     createdAt: row.created_at,
-  };
-}
-
-/** Uso de almacenamiento del usuario (vista `storage_usage` + cuota de `profiles`). */
-export async function getStorageUsage(supabase: TypedClient, userId: string): Promise<StorageUsage> {
-  const [{ data: usage }, { data: profile }] = await Promise.all([
-    supabase.from("storage_usage").select("used_bytes, file_count").eq("owner_id", userId).maybeSingle(),
-    supabase.from("profiles").select("storage_quota_bytes").eq("id", userId).single(),
-  ]);
-
-  return {
-    usedBytes: usage?.used_bytes ?? 0,
-    fileCount: usage?.file_count ?? 0,
-    quotaBytes: profile?.storage_quota_bytes ?? DEFAULT_QUOTA_BYTES,
   };
 }
 
@@ -263,4 +247,44 @@ export async function getAllSharesForUser(
     fileName: (row.files as unknown as { name: string; cid: string } | null)?.name ?? "Archivo eliminado",
     fileCid: (row.files as unknown as { name: string; cid: string } | null)?.cid ?? "",
   }));
+}
+
+/**
+ * Límites del plan del usuario + su uso actual, en una sola llamada RPC
+ * (ver migración 0005). Fuente de verdad única para toda la app —
+ * dashboard, upload, sharing— sobre cuánto puede usar cada usuario.
+ */
+export async function getMyLimits(supabase: TypedClient): Promise<UserLimits> {
+  const { data, error } = await supabase.rpc("get_my_limits");
+  if (error) throw error;
+
+  const row = data?.[0];
+  if (!row) {
+    // No debería pasar (todo usuario autenticado tiene profile + plan por
+    // el trigger de alta), pero por si acaso devolvemos los límites más
+    // restrictivos en vez de reventar la UI.
+    return {
+      planId: "registered",
+      planDisplayName: "Registrado",
+      storageQuotaBytes: 524288000,
+      maxFiles: 50,
+      maxFileSizeBytes: 26214400,
+      maxActiveShares: 3,
+      usedBytes: 0,
+      fileCount: 0,
+      activeSharesCount: 0,
+    };
+  }
+
+  return {
+    planId: row.plan_id as UserLimits["planId"],
+    planDisplayName: row.plan_display_name,
+    storageQuotaBytes: row.storage_quota_bytes,
+    maxFiles: row.max_files,
+    maxFileSizeBytes: row.max_file_size_bytes,
+    maxActiveShares: row.max_active_shares,
+    usedBytes: row.used_bytes,
+    fileCount: row.file_count,
+    activeSharesCount: row.active_shares_count,
+  };
 }

@@ -29,10 +29,25 @@ export interface Database {
           display_name: string | null;
           avatar_url: string | null;
           storage_quota_bytes: number;
+          plan: "registered" | "pro";
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["profiles"]["Row"]> & { id: string; email: string };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Row"]>;
+        Relationships: [];
+      };
+      plans: {
+        Row: {
+          id: string;
+          display_name: string;
+          price_cents_per_year: number;
+          storage_quota_bytes: number;
+          max_files: number;
+          max_file_size_bytes: number;
+          max_active_shares: number;
+        };
+        Insert: Partial<Database["public"]["Tables"]["plans"]["Row"]> & { id: string; display_name: string };
+        Update: Partial<Database["public"]["Tables"]["plans"]["Row"]>;
         Relationships: [];
       };
       folders: {
@@ -126,6 +141,20 @@ export interface Database {
           share_permission: "view" | "download";
           share_expires_at: string | null;
         })[];
+      };
+      get_my_limits: {
+        Args: Record<string, never>;
+        Returns: {
+          plan_id: string;
+          plan_display_name: string;
+          storage_quota_bytes: number;
+          max_files: number;
+          max_file_size_bytes: number;
+          max_active_shares: number;
+          used_bytes: number;
+          file_count: number;
+          active_shares_count: number;
+        }[];
       };
     };
     Enums: Record<string, never>;

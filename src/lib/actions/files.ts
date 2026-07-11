@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { getPinningAdapter } from "@/lib/ipfs/pinning-provider";
+import { getMyLimits } from "@/lib/supabase/queries";
 import {
   createFolderSchema,
   finalizeUploadSchema,
@@ -370,6 +371,19 @@ export async function createShareAction(input: unknown) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado." };
+
+  // Límite de enlaces privados activos según el plan del usuario (ver
+  // migración 0005). Los enlaces caducados NO se borran automáticamente
+  // de la tabla, pero get_my_limits cuenta TODAS las filas de `shares`
+  // del usuario, caducadas o no — así que si el límite empieza a pesar
+  // más de la cuenta, conviene un job de limpieza a futuro; de momento,
+  // revocar manualmente libera hueco al instante.
+  const limits = await getMyLimits(supabase);
+  if (limits.activeSharesCount >= limits.maxActiveShares) {
+    return {
+      error: `Has alcanzado el límite de ${limits.maxActiveShares} enlaces de compartición de tu plan (${limits.planDisplayName}). Revoca alguno o mejora de plan.`,
+    };
+  }
 
   const expiresAt = parsed.data.expiresInDays
     ? new Date(Date.now() + parsed.data.expiresInDays * 24 * 60 * 60 * 1000).toISOString()

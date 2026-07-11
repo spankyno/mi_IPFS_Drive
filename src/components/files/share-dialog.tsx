@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useShares, useInvalidateShares } from "@/hooks/use-shares";
+import { useMyLimits } from "@/hooks/use-my-limits";
 import { setVisibilityAction, createShareAction, revokeShareAction } from "@/lib/actions/files";
 import { formatRelativeTime } from "@/lib/utils/format";
 import { toast } from "sonner";
@@ -22,10 +24,12 @@ function siteOrigin() {
 
 export function ShareDialog({
   file,
+  userId,
   onClose,
   onVisibilityChanged,
 }: {
   file: DriveFile | null;
+  userId: string;
   onClose: () => void;
   onVisibilityChanged: (visibility: DriveFile["visibility"]) => void;
 }) {
@@ -36,6 +40,9 @@ export function ShareDialog({
 
   const { data: shares = [], isLoading: isLoadingShares } = useShares(file?.id ?? null);
   const invalidateShares = useInvalidateShares();
+  const queryClient = useQueryClient();
+  const { data: limits } = useMyLimits(userId);
+  const atShareLimit = limits ? limits.activeSharesCount >= limits.maxActiveShares : false;
 
   if (!file) return null;
 
@@ -78,6 +85,7 @@ export function ShareDialog({
     } else {
       toast.success("Enlace privado creado");
       invalidateShares(file.id);
+      queryClient.invalidateQueries({ queryKey: ["my-limits", userId] });
     }
   }
 
@@ -90,6 +98,7 @@ export function ShareDialog({
     } else {
       toast.success("Enlace revocado");
       invalidateShares(file.id);
+      queryClient.invalidateQueries({ queryKey: ["my-limits", userId] });
     }
   }
 
@@ -150,13 +159,20 @@ export function ShareDialog({
             </div>
             <p className="text-xs text-muted-foreground">
               El archivo sigue siendo privado — solo funciona para quien tenga el enlace exacto. Puedes revocarlo cuando quieras.
+              {limits && (
+                <>
+                  {" "}
+                  ({limits.activeSharesCount}/{limits.maxActiveShares} usados en tu plan {limits.planDisplayName})
+                </>
+              )}
             </p>
 
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={permission}
                 onChange={(e) => setPermission(e.target.value as "view" | "download")}
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                disabled={atShareLimit}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
               >
                 <option value="view">Solo ver</option>
                 <option value="download">Ver y descargar</option>
@@ -164,17 +180,24 @@ export function ShareDialog({
               <select
                 value={expiresInDays}
                 onChange={(e) => setExpiresInDays(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                disabled={atShareLimit}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
               >
                 <option value="never">Nunca caduca</option>
                 <option value="1">Caduca en 1 día</option>
                 <option value="7">Caduca en 7 días</option>
                 <option value="30">Caduca en 30 días</option>
               </select>
-              <Button size="sm" onClick={handleCreateShare} isLoading={isCreatingShare}>
+              <Button size="sm" onClick={handleCreateShare} isLoading={isCreatingShare} disabled={atShareLimit}>
                 Crear enlace
               </Button>
             </div>
+
+            {atShareLimit && (
+              <p className="text-xs text-destructive">
+                Has alcanzado el límite de enlaces de tu plan. Revoca alguno para crear otro.
+              </p>
+            )}
 
             {isLoadingShares ? (
               <div className="flex justify-center py-4">

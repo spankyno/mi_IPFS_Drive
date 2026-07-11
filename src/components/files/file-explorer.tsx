@@ -114,6 +114,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
     invalidate(folderId);
     queryClient.invalidateQueries({ queryKey: ["search-files", userId] });
     queryClient.invalidateQueries({ queryKey: ["all-tags", userId] });
+    queryClient.invalidateQueries({ queryKey: ["my-limits", userId] });
   }
 
   function handleFileDeleted() {
@@ -438,6 +439,7 @@ export function FileExplorer({ userId, folderId, path, initialData }: FileExplor
 
       <ShareDialog
         file={shareFile}
+        userId={userId}
         onClose={() => setShareFile(null)}
         onVisibilityChanged={(visibility) => {
           setShareFile((prev) => (prev ? { ...prev, visibility } : prev));

@@ -1,13 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getPinningAdapter } from "@/lib/ipfs/pinning-provider";
-import { getStorageUsage } from "@/lib/supabase/queries";
+import { getMyLimits } from "@/lib/supabase/queries";
+import { formatBytes } from "@/lib/utils/format";
 import { z } from "zod";
 
 const bodySchema = z.object({
   fileName: z.string().min(1).max(255),
   contentType: z.string().min(1),
-  sizeBytes: z.number().positive().max(5 * 1024 * 1024 * 1024), // 5 GB, límite orientativo de app
+  sizeBytes: z.number().positive().max(5 * 1024 * 1024 * 1024), // 5 GB, tope absoluto de la app (por encima del de cualquier plan)
 });
 
 /**
@@ -39,15 +40,34 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Antes de emitir la URL, comprobamos que el archivo no vaya a superar
-  // la cuota del usuario. Sin esto, cualquiera podía seguir subiendo
-  // archivos indefinidamente sin límite real de la aplicación (el único
-  // límite habría sido el del propio Filebase, no el nuestro).
-  const usage = await getStorageUsage(supabase, user.id);
-  if (usage.usedBytes + parsed.data.sizeBytes > usage.quotaBytes) {
+  // Comprobamos los 3 límites del plan del usuario ANTES de emitir la URL
+  // firmada. Sin esto, cualquiera podía seguir subiendo sin ningún límite
+  // real de la aplicación (el único límite habría sido el del propio
+  // Filebase, no el nuestro) — ver migración 0005 y tabla `plans`.
+  const limits = await getMyLimits(supabase);
+
+  if (parsed.data.sizeBytes > limits.maxFileSizeBytes) {
     return NextResponse.json(
       {
-        error: `Este archivo superaría tu cuota de almacenamiento (${(usage.quotaBytes / 1024 ** 3).toFixed(1)} GB). Borra algo o pide más espacio.`,
+        error: `Tu plan (${limits.planDisplayName}) permite archivos de hasta ${formatBytes(limits.maxFileSizeBytes)}. Este archivo pesa ${formatBytes(parsed.data.sizeBytes)}.`,
+      },
+      { status: 413 }
+    );
+  }
+
+  if (limits.usedBytes + parsed.data.sizeBytes > limits.storageQuotaBytes) {
+    return NextResponse.json(
+      {
+        error: `Este archivo superaría tu cuota de almacenamiento (${formatBytes(limits.storageQuotaBytes)} en el plan ${limits.planDisplayName}). Borra algo o mejora de plan.`,
+      },
+      { status: 413 }
+    );
+  }
+
+  if (limits.fileCount >= limits.maxFiles) {
+    return NextResponse.json(
+      {
+        error: `Has alcanzado el límite de ${limits.maxFiles} archivos de tu plan (${limits.planDisplayName}). Borra alguno o mejora de plan.`,
       },
       { status: 413 }
     );

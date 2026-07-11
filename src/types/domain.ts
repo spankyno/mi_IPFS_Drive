@@ -77,6 +77,20 @@ export interface StorageUsage {
   fileCount: number;
 }
 
+export type PlanId = "registered" | "pro";
+
+export interface UserLimits {
+  planId: PlanId;
+  planDisplayName: string;
+  storageQuotaBytes: number;
+  maxFiles: number;
+  maxFileSizeBytes: number;
+  maxActiveShares: number;
+  usedBytes: number;
+  fileCount: number;
+  activeSharesCount: number;
+}
+
 /** Progreso de una subida en curso, usado por el store de uploads en cliente. */
 export interface UploadTask {
   id: string;

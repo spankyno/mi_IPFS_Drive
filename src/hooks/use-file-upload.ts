@@ -111,7 +111,7 @@ export function useFileUpload(userId: string, folderId: string | null) {
 
         // Refresca todo lo que puede haber cambiado tras subir un archivo.
         queryClient.invalidateQueries({ queryKey: folderContentsKey(userId, folderId) });
-        queryClient.invalidateQueries({ queryKey: ["storage-usage", userId] });
+        queryClient.invalidateQueries({ queryKey: ["my-limits", userId] });
         queryClient.invalidateQueries({ queryKey: ["recent-files", userId] });
       } catch (error) {
         const message = error instanceof Error ? error.message : "Error desconocido durante la subida.";

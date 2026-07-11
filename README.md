@@ -50,7 +50,7 @@ pnpm install   # o npm install / yarn
 
 ### 2. Supabase (Auth + DB + Realtime)
 1. Crea un proyecto gratis en [supabase.com](https://supabase.com) (free tier: 500 MB DB, 50k usuarios activos/mes, Realtime incluido).
-2. En el SQL Editor del dashboard, ejecuta en orden: `supabase/migrations/0001_init.sql`, `0002_add_storage_key.sql`, **`0003_share_function.sql`** (corrige un fallo de seguridad real de la 0001 — ver nota más abajo — así que no la saltes aunque no vayas a usar la función de compartir) y `0004_encryption_key.sql`.
+2. En el SQL Editor del dashboard, ejecuta en orden: `supabase/migrations/0001_init.sql`, `0002_add_storage_key.sql`, **`0003_share_function.sql`** (corrige un fallo de seguridad real de la 0001 — ver nota más abajo — así que no la saltes aunque no vayas a usar la función de compartir), `0004_encryption_key.sql` y `0005_plans.sql`.
 3. En **Authentication → Providers**, activa "Email" y asegúrate de que "Confirm email" y "Magic Link" estén habilitados.
 4. En **Authentication → URL Configuration**, añade `http://localhost:3000/auth/callback` (y tu dominio de producción) como Redirect URL. Esta misma URL de callback maneja magic links, confirmación de email **y** reset de contraseña.
 5. Copia `Project URL` y `anon public key` a tu `.env.local`.
@@ -246,6 +246,51 @@ Con `NEXT_PUBLIC_ENABLE_CLIENT_ENCRYPTION=true`, aparece un botón **"Cifrar"** 
 
 En resumen: este cifrado es una capa de defensa real contra la naturaleza pública de IPFS, no una bóveda impenetrable frente a todo. Para casos de verdadera sensibilidad (datos médicos, legales, etc.) valora añadir cifrado derivado de contraseña de usuario antes de usar esto en producción.
 
+## 💳 Planes: Registrado (gratis) y Pro (19€/año) — Paso 9
+
+Dos tipos de usuario, con límites reales aplicados en servidor (no solo mostrados en la UI):
+
+| Límite | **Registrado** (0€) | **Pro** (19€/año) |
+|---|---|---|
+| Almacenamiento total | 500 MB | 5 GB |
+| Nº de archivos | 50 | 5.000 |
+| Tamaño máx. por archivo | 25 MB | 500 MB |
+| Enlaces de compartición activos | 3 | 100 |
+| Cifrado cliente-side | ✅ | ✅ |
+
+Los números viven en la tabla `plans` (migración `0005_plans.sql`), no hardcodeados en el código — puedes cambiar cualquier cifra con un simple `UPDATE` en Supabase, sin tocar ni redeployar la aplicación:
+
+```sql
+update public.plans set storage_quota_bytes = 10737418240 where id = 'pro'; -- subir Pro a 10 GB
+```
+
+### Cómo otorgar "Pro" a un usuario (100% manual, sin pasarela de pago integrada)
+
+Este proyecto no integra Stripe/PayPal — el cobro de los 19€/año lo gestionas tú por fuera (transferencia, PayPal.me, lo que prefieras) y luego, cuando confirmes el pago, marcas al usuario como Pro directamente en Supabase:
+
+**Opción A — Table Editor (sin SQL):**
+1. Ve a tu proyecto de Supabase → **Table Editor → `profiles`**.
+2. Busca la fila del usuario por su email.
+3. Edita la columna `plan`: cambia `registered` por `pro`.
+4. Guarda. Los límites nuevos se aplican en la **siguiente petición** de ese usuario — no hace falta que cierre sesión, ni reiniciar nada, ni redeployar.
+
+**Opción B — SQL Editor (más rápido si haces esto a menudo):**
+```sql
+update public.profiles set plan = 'pro' where email = 'cliente@ejemplo.com';
+```
+Para revertir a gratis:
+```sql
+update public.profiles set plan = 'registered' where email = 'cliente@ejemplo.com';
+```
+
+### Cómo se aplican los límites técnicamente
+
+- **Fuente de verdad única**: la función Postgres `get_my_limits()` (con `security definer`) hace un JOIN entre `profiles.plan` y `plans`, y calcula en la misma llamada el uso actual (bytes, nº de archivos, nº de enlaces activos) — así toda la app (dashboard, upload, compartir) consulta exactamente los mismos números, sin duplicar lógica de negocio en el cliente.
+- **`/api/upload-token`** comprueba, en este orden, antes de emitir la URL firmada de subida: tamaño del archivo individual > `max_file_size_bytes`, cuota total > `storage_quota_bytes`, número de archivos > `max_files`. Cualquiera de los tres bloquea la subida con un mensaje explícito de qué límite se ha superado.
+- **`createShareAction`** comprueba `active_shares_count` contra `max_active_shares` antes de crear un enlace privado nuevo.
+- **En la UI**: la barra de almacenamiento del dashboard muestra el plan actual (con badge ✨ si es Pro) y el progreso de bytes y archivos; el diálogo de compartir muestra "X/Y enlaces usados" y deshabilita el botón de crear al llegar al límite.
+- Todos estos límites son de **aplicación**, no de Postgres/RLS — un usuario Pro con acceso directo a la base de datos (algo que no debería tener) podría técnicamente saltárselos escribiendo filas directamente. Es un nivel de protección adecuado para el modelo de "yo controlo quién es Pro a mano"; si en el futuro añades una pasarela de pago automática, estos mismos límites seguirían aplicando igual.
+
 ## 🗺️ Roadmap de implementación (este build es iterativo)
 
 - [x] 1. Estructura base + configuración + README
@@ -255,8 +300,9 @@ En resumen: este cifrado es una capa de defensa real contra la naturaleza públi
 - [x] 5. Previews, búsqueda avanzada, tags
 - [x] 6. Compartir (público/privado) + actividad realtime
 - [x] 7. Optimización, seguridad, pulido UX final
-- [x] 8. Cifrado cliente-side real con AES-256-GCM (**este paso**)
+- [x] 8. Cifrado cliente-side real con AES-256-GCM
+- [x] 9. Sistema de planes: Registrado (gratis) y Pro (19€/año), con límites aplicados en servidor (**este paso**)
 
-**La aplicación cubre el roadmap original más esta extensión.** Otras ideas razonables para seguir iterando: derivar la clave de cifrado de una contraseña del usuario (verdadero zero-knowledge, en vez de guardar la clave en la DB), rate limiting real en `/api/upload-token` (necesitaría un store externo tipo Upstash Redis), miniaturas generadas para vídeos/PDFs, y papelera de reciclaje con recuperación en vez de borrado inmediato.
+**La aplicación cubre el roadmap original más estas dos extensiones.** Otras ideas razonables para seguir iterando: pasarela de pago automática (Stripe) que actualice `profiles.plan` sola en vez de a mano, derivar la clave de cifrado de una contraseña del usuario (verdadero zero-knowledge), rate limiting real en `/api/upload-token`, miniaturas generadas para vídeos/PDFs, y papelera de reciclaje con recuperación en vez de borrado inmediato.
 
 Vamos a construirlo por bloques, confirmando contigo antes de avanzar al siguiente. 👇

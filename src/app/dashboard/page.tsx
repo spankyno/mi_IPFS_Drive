@@ -1,9 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import {
-  getStorageUsage,
+  getMyLimits,
   getRecentFiles,
   getRecentActivity,
-  getActiveSharesCount,
   getFoldersCount,
 } from "@/lib/supabase/queries";
 import { StatsCards } from "@/components/dashboard/stats-cards";
@@ -21,11 +20,10 @@ export default async function DashboardPage() {
   const userId = user!.id;
 
   // Todas las queries en paralelo: reduce el tiempo hasta el primer byte útil.
-  const [storageUsage, recentFiles, recentActivity, sharesCount, foldersCount] = await Promise.all([
-    getStorageUsage(supabase, userId),
+  const [limits, recentFiles, recentActivity, foldersCount] = await Promise.all([
+    getMyLimits(supabase),
     getRecentFiles(supabase, userId),
     getRecentActivity(supabase, userId),
-    getActiveSharesCount(supabase, userId),
     getFoldersCount(supabase, userId),
   ]);
 
@@ -39,16 +37,16 @@ export default async function DashboardPage() {
       </div>
 
       <StatsCards
-        fileCount={storageUsage.fileCount}
-        usedBytes={storageUsage.usedBytes}
-        sharesCount={sharesCount}
+        fileCount={limits.fileCount}
+        usedBytes={limits.usedBytes}
+        sharesCount={limits.activeSharesCount}
         foldersCount={foldersCount}
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <RecentFiles userId={userId} initialData={recentFiles} />
-          <StorageUsageBar userId={userId} initialData={storageUsage} />
+          <StorageUsageBar userId={userId} initialData={limits} />
         </div>
         <ActivityFeed userId={userId} initialData={recentActivity} />
       </div>
