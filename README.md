@@ -2,7 +2,7 @@
 
 Almacenamiento de archivos **100% descentralizado** sobre IPFS, con una experiencia de usuario a la altura de Google Drive + Notion. Next.js 15 (App Router, RSC, Server Actions) + React 19 + TypeScript + Tailwind + shadcn/ui en el frontend; Supabase (Postgres + Auth + Realtime) solo para **metadatos** — nunca para los bytes de los archivos.
 
-> **Principio de diseño clave:** la base de datos jamás almacena el contenido de un archivo. Solo guarda su CID (Content Identifier de IPFS), nombre, tags, tamaño, tipo MIME y flags de visibilidad. El archivo en sí vive en la red IPFS, "pineado" (persistido) por un servicio gratuito. 
+> **Principio de diseño clave:** la base de datos jamás almacena el contenido de un archivo. Solo guarda su CID (Content Identifier de IPFS), nombre, tags, tamaño, tipo MIME y flags de visibilidad. El archivo en sí vive en la red IPFS, "pineado" (persistido) por un servicio gratuito.
 
 ---
 
@@ -288,7 +288,8 @@ update public.profiles set plan = 'registered' where email = 'cliente@ejemplo.co
 - **Fuente de verdad única**: la función Postgres `get_my_limits()` (con `security definer`) hace un JOIN entre `profiles.plan` y `plans`, y calcula en la misma llamada el uso actual (bytes, nº de archivos, nº de enlaces activos) — así toda la app (dashboard, upload, compartir) consulta exactamente los mismos números, sin duplicar lógica de negocio en el cliente.
 - **`/api/upload-token`** comprueba, en este orden, antes de emitir la URL firmada de subida: tamaño del archivo individual > `max_file_size_bytes`, cuota total > `storage_quota_bytes`, número de archivos > `max_files`. Cualquiera de los tres bloquea la subida con un mensaje explícito de qué límite se ha superado.
 - **`createShareAction`** comprueba `active_shares_count` contra `max_active_shares` antes de crear un enlace privado nuevo.
-- **En la UI**: la barra de almacenamiento del dashboard muestra el plan actual (con badge ✨ si es Pro) y el progreso de bytes y archivos; el diálogo de compartir muestra "X/Y enlaces usados" y deshabilita el botón de crear al llegar al límite.
+- **En la UI**: el badge de plan aparece junto al avatar (esquina ✨ si es Pro) y en su menú desplegable; la barra de almacenamiento del dashboard muestra el progreso de bytes y archivos; `/dashboard/settings` muestra el desglose completo de los 4 límites con barras de progreso; el diálogo de compartir muestra "X/Y enlaces usados" y deshabilita el botón de crear al llegar al límite.
+- **`getMyLimits()` nunca lanza una excepción** aunque el RPC falle (por ejemplo, si la migración 0005 aún no se ha ejecutado en tu proyecto de Supabase) — degrada a los límites de "Registrado" y lo registra en los logs del servidor, en vez de tirar toda la página con el error boundary genérico. Si los límites mostrados no coinciden con lo esperado, revisa los logs de Vercel por si hay un aviso de "get_my_limits RPC falló".
 - Todos estos límites son de **aplicación**, no de Postgres/RLS — un usuario Pro con acceso directo a la base de datos (algo que no debería tener) podría técnicamente saltárselos escribiendo filas directamente. Es un nivel de protección adecuado para el modelo de "yo controlo quién es Pro a mano"; si en el futuro añades una pasarela de pago automática, estos mismos límites seguirían aplicando igual.
 
 ## 🗺️ Roadmap de implementación (este build es iterativo)
