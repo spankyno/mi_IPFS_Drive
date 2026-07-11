@@ -2,7 +2,7 @@
 
 Almacenamiento de archivos **100% descentralizado** sobre IPFS, con una experiencia de usuario a la altura de Google Drive + Notion. Next.js 15 (App Router, RSC, Server Actions) + React 19 + TypeScript + Tailwind + shadcn/ui en el frontend; Supabase (Postgres + Auth + Realtime) solo para **metadatos** — nunca para los bytes de los archivos.
 
-> **Principio de diseño clave:** la base de datos jamás almacena el contenido de un archivo. Solo guarda su CID (Content Identifier de IPFS), nombre, tags, tamaño, tipo MIME y flags de visibilidad. El archivo en sí vive en la red IPFS, "pineado" (persistido) por un servicio gratuito.
+> **Principio de diseño clave:** la base de datos jamás almacena el contenido de un archivo. Solo guarda su CID (Content Identifier de IPFS), nombre, tags, tamaño, tipo MIME y flags de visibilidad. El archivo en sí vive en la red IPFS, "pineado" (persistido) por un servicio gratuito. 
 
 ---
 
