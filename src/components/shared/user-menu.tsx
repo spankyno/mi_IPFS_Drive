@@ -3,7 +3,7 @@
 import * as React from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Avatar from "@radix-ui/react-avatar";
-import { LogOut, User, Sparkles } from "lucide-react";
+import { LogOut, User, Sparkles, Loader2 } from "lucide-react";
 import { signOutAction } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils/cn";
 import type { PlanId } from "@/types/domain";
@@ -19,6 +19,7 @@ interface UserMenuProps {
 export function UserMenu({ email, displayName, avatarUrl, planId, planDisplayName }: UserMenuProps) {
   const initials = (displayName ?? email).slice(0, 2).toUpperCase();
   const isPro = planId === "pro";
+  const [isSigningOut, startSignOut] = React.useTransition();
 
   return (
     <DropdownMenu.Root>
@@ -67,16 +68,26 @@ export function UserMenu({ email, displayName, avatarUrl, planId, planDisplayNam
             </span>
           </div>
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
-          <form action={signOutAction}>
-            <DropdownMenu.Item asChild>
-              <button
-                type="submit"
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive outline-none transition-colors hover:bg-destructive/10 focus:bg-destructive/10"
-              >
-                <LogOut className="size-4" /> Cerrar sesión
-              </button>
-            </DropdownMenu.Item>
-          </form>
+          <DropdownMenu.Item
+            onSelect={(e) => {
+              // Evitamos depender de un <form> anidado dentro de un
+              // DropdownMenu.Item con un <button type="submit"> — es una
+              // combinación conocida por fallar con Radix (el propio Item
+              // gestiona el evento de selección y puede interferir con el
+              // submit nativo, dejando el clic sin efecto). Llamamos al
+              // Server Action directamente, igual que el resto de acciones
+              // de este menú.
+              e.preventDefault();
+              startSignOut(() => {
+                signOutAction();
+              });
+            }}
+            disabled={isSigningOut}
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive outline-none transition-colors hover:bg-destructive/10 focus:bg-destructive/10 data-[disabled]:opacity-50"
+          >
+            {isSigningOut ? <Loader2 className="size-4 animate-spin" /> : <LogOut className="size-4" />}
+            Cerrar sesión
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
