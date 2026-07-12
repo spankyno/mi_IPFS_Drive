@@ -84,7 +84,7 @@ begin
   return query
     select
       p.id, p.display_name, p.storage_quota_bytes, p.max_files, p.max_file_size_bytes, p.max_active_shares,
-      coalesce((select sum(f.size_bytes) from public.files f where f.owner_id = auth.uid()), 0),
+      coalesce((select sum(f.size_bytes) from public.files f where f.owner_id = auth.uid()), 0)::bigint,
       coalesce((select count(*) from public.files f where f.owner_id = auth.uid()), 0),
       coalesce((select count(*) from public.shares s where s.owner_id = auth.uid()), 0)
     from public.profiles pr
