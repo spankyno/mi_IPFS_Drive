@@ -45,7 +45,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Next.js necesita 'unsafe-inline'/'unsafe-eval' en dev y para hydration scripts
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://aitors-hub-dashboard.asanchezgu.workers.dev", // <--- Permitir el script del tracker
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' https: data: blob:",
               "media-src 'self' https:",
