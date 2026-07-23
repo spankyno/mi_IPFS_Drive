@@ -74,6 +74,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Toaster richColors position="top-right" closeButton />
           </QueryProvider>
         </ThemeProvider>
+
+        {/* Script de Aitor's Analytics */}
+        <Script
+          src="https://aitors-hub-dashboard.asanchezgu.workers.dev/tracker.js"
+          data-app="ipfs-drive"
+          data-key="ak_617bd780639a4e81b6900417f93a86fa"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
